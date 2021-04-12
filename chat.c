@@ -6,18 +6,19 @@
 #define LINUX
 #define __KERNEL__
 
-#include <linux/kernel.h>  	
+#include <linux/kernel.h>
 #include <linux/module.h>
 #include <linux/time.h>
-#include <linux/fs.h>       		
+#include <linux/fs.h>
 #include <asm/uaccess.h>
-#include <linux/errno.h>  
+#include <linux/errno.h>
 #include <asm/segment.h>
 #include <asm/current.h>
 
 #include "chat.h"
 
 #define MY_DEVICE "chat"
+#define MAX_ROOMS_POSSIBLE 256
 
 MODULE_AUTHOR("Anonymous");
 MODULE_LICENSE("GPL");
@@ -27,155 +28,200 @@ int my_major = 0; /* will hold the major # of my device driver */
 struct timeval tv; /* Used to get the current time */
 
 struct file_operations my_fops = {
-    .open = my_open,
-    .release = my_release,
-    .read = my_read,
-    .ioctl = my_ioctl,
-    .llseek = my_llseek
+        .open = my_open,
+        .release = my_release,
+        .read = my_read,
+        .ioctl = my_ioctl,
+        .llseek = my_llseek
 };
 
-typedef struct message_t *MyPrivateData;
+
+struct Messages_List {
+    struct Messages_List *prev;
+    struct Messages_List *next;
+    struct message_t *message_pointer;
+};
+
 
 // each minor is a chatroom
-typedef struct minor_list{
-    int minor;  // in range of [0-255]
-    int participants_number;
+struct Chat_Room {
+    unsigned int minor_id;  // the room's ID
+    unsigned int participants_number;
 
-    //MyPrivateData private_data;
-    struct message_t* message_p;
+    // linked list of messages
+    struct Messages_List *messages_list;
+    struct message_t *head_message;
+    struct message_t *current_message;  // like iterator
+};
 
-    struct minor_list* next;
-    struct minor_list* prev;
-}*Chat_room;
 
+
+// TODO: linked list of message_t
+
+// taking advantage of the fact minors are in the range of [0-255]
+Chat_Room chat_rooms[MAX_ROOMS_POSSIBLE];
 
 /* globals */
 int my_major = 0; /* will hold the major # of my device driver */
-Chat_room chat_room;
 
 
 
-int init_module(void)
-{
+int init_module(void) {
     my_major = register_chrdev(my_major, MY_DEVICE, &my_fops);
     // from "my_module.c" hw0
     if (my_major < 0)
     {
-        printk(KERN_WARNING "can't get dynamic major\n");
+        printk(KERN_WARNING
+        "can't get dynamic major\n");
         return my_major;
     }
     // null pointer, initialization done on open
-    chat_room=NULL;
+    chat_room = NULL;
     printk("Device driver registered - called from insmod\n");
 
     return 0;
 }
 
 
-void cleanup_module(void)
-{
+void cleanup_module(void) {
     unregister_chrdev(my_major, MY_DEVICE);
     // before leaving free list
-    while(messages_list.message_p!=NULL){
-        while(messages_list.next!=NULL){
-            kfree(messages_list->message_p->message);
-            messages_list.message_p=messages_list.next;
-            kfree(messages_list.message_p.prev);
+    for (i = 0; i < MAX_ROOMS_POSSIBLE; i++)
+    {
+        if (chat_rooms[i]->minor_id == NULL)
+        {
+            struct Messages_List *iter = chat_rooms[i]->messages_list->head_message;
+
+            // free all messages
+            while (iter != NULL)
+            {
+                iter = iter->next;
+                kfree(iter->message_pointer);  //TODO: need &(iter->message_pointer)?
+                kfree(iter->prev);
+
+            }
+            // free the list
+            kfree(chat_rooms[i]->messages_list)
+            // assign room as free
+            chat_rooms[i] = NULL
         }
-
+        // release chat rooms list
+        kfree(chat_rooms)
     }
-
     // all allocations been released.
     return;
 }
 
 // if room with minor# exist - enter, else- create it
-int my_open(struct inode *inode, struct file *filp)
-{
+int my_open(struct inode *inode, struct file *filp) {
     // check if this minor number is already exist.
     unsigned int minor = MINOR(inode->i_rdev);
-    //add minor to the list:
-    Chat_room iter = chat_room;
-    // scan list of existing rooms to see if new room is needed
-    while(iter != NULL)
+    unsigned int minor_found = 0;
+    unsigned int i = 0;    // scan list of existing rooms to see if new room is needed
+    unsigned int first_empty_index = 0;    // scan list of existing rooms to see if new room is needed
+    for (i = 0; i < MAX_ROOMS_POSSIBLE; i++)
     {
-        // means end of list and no match
-        if(iter->next == NULL)
-        {
-            break;
-        }
 
-        if(iter->minor == minor)
-        {
-            // minor already has an open file so we use it's private data with buffer
-            iter->participants_number+=1;
-
-            // TODO: what should be in our private_data? message_t? seek pointer? both?
-            filp->private_data = iter->private_data;
+        // save the first available minor that's free
+        if (chat_rooms[i]->minor_id == NULL)
+        {  // first empty index
+            first_empty_index = i;
             return 0;
+
         }
 
-
-        iter = iter->next;
-    }
-    // if it does - join the room
-
-
-    // if not - create room\chat\messages list
-    //new chatroom element
-    Chat_room chat_r = (MyPrivateData)kmalloc(sizeof(struct message_t),GFP_KERNEL);
-    if(chat_r == NULL) {
-        return -ENOMEM;
     }
 
-    mpd->points = 0;
-    filp->private_data = mpd;
-
-    //new chatroom element
-    MinorList new_minor = (MinorList)kmalloc(sizeof(struct minor_list),GFP_KERNEL);
-    // verify allocation
-    if(new_minor == NULL) {
-        return -EFAULT;
-    }
-    new_minor->private_data = mpd;
-    new_minor->minor = minor;
-    // initializing list's first node
-    chat_room.prev=NULL;
-    chat_room.next=NULL;
-    chat_room.message_p=NULL;
-    chat_room->participants_number=1;
-
-
-    if(iter == NULL)
+    // means end of list and no match
+    if (i == 255 && minor_found != 1)
     {
-        m_list = new_minor;
-    }
-    else
-    {
-        iter->next = new_minor;
-    }
+        // if not - create room\chat\messages list
+        //new chatroom element
+        Chat_Room new_chat_room = (Chat_Room *) kmalloc(sizeof(struct Chat_Room), GFP_KERNEL);
+        // kmalloc validation
+        if (new_chat_room == NULL)
+        {
+            return -EFAULT;
+        }
+        new_chat_room->participants_number = 1;
+        new_chat_room->minor_id = minor;
 
-    // handle open
+        new_chat_room->messages_list = (Messages_List *) kmalloc(sizeof(struct Messages_List),
+                                                                 GFP_KERNEL);  // TODO: make sure it's the right casting
+        // kmalloc validation
+        if (new_chat_room->messages_list == NULL)
+        {
+            return -ENOMEM;
+        }
+
+        new_chat_room->messages_list->message_pointer = (message_t *) kmalloc(sizeof(struct message_t),
+                                                                              GFP_KERNEL);  // TODO: make sure it's the right casting
+        // kmalloc validation
+        if (new_chat_room->messages_list->message_pointer == NULL)
+        {
+            return -ENOMEM;
+        }
+
+        new_chat_room->current_message = new_chat_room->head_message
+        messages_list->message_pointer;  //  pointer to first message
+
+        // kmalloc validation
+        if (new_chat_room->current_message == NULL)
+        {
+            return -ENOMEM;
+        }
+
+        // all kmallocs are successful
+        chat_rooms[first_empty_index] = new_chat_room;
+
+    }
 
     return 0;
 }
 
+
 // when one participant only leaves a room
-int my_release(struct inode *inode, struct file *filp)
-{
+int my_release(struct inode *inode, struct file *filp) {
     // handle file closing
 
     // scan minor list for the minor number we would like to close
-    // if it exist
-    // if it has only 1 participant - release it like linked list element and kfree(iter and private data)
-    // else if there still others in the room - participants-=1
+    for (i = 0; i < MAX_ROOMS_POSSIBLE; i++)
+    {
+        if (chat_rooms[i]->minor_id == minor)
+        {  // if it does - join the room
+            if (chat_rooms[i]->minor_id.participants_number > 1)
+            {  // leaver isn't the last one
+                // else if there still others in the room - participants-=1
+                chat_rooms[i]->minor_id.participants_number -= 1;
+            }
+            else
+            {  // if it has only 1 participant - release it like linked list element and kfree(iter and private data)
+
+                struct Messages_List *iter = chat_rooms[i]->messages_list->head_message;
+
+                // free all messages
+                while (iter != NULL)
+                {
+                    iter = iter->next;
+                    kfree(iter->message_pointer);  //TODO: need &(iter->message_pointer)?
+                    kfree(iter->prev);
+
+                }
+                // free the list
+                kfree(chat_rooms[i]->messages_list)
+                // assign room as free
+                chat_rooms[i] = NULL
+            }
+
+        }
+    }
 
     return 0;
 }
 
+
 // file *pointer* has a property of "private data" to indicate if it's open, and where we are on the file
-ssize_t my_read(struct file *filp, char *buf, size_t count, loff_t *f_pos)
-{
+ssize_t my_read(struct file *filp, char *buf, size_t count, loff_t *f_pos) {
     //  our buff is always pointer to message_t
     (struct *message_t)(buf)
     //
@@ -184,33 +230,31 @@ ssize_t my_read(struct file *filp, char *buf, size_t count, loff_t *f_pos)
 
 
     // Return number of bytes read.
-    return 0; 
+    return 0;
 }
 
-int my_ioctl(struct inode *inode, struct file *filp, unsigned int cmd, unsigned long arg)
-{
-    switch(cmd)
+int my_ioctl(struct inode *inode, struct file *filp, unsigned int cmd, unsigned long arg) {
+    switch (cmd)
     {
-    case COUNT_UNREAD:
-	//
-	// handle 
-	//
-	break;
-    case SEARCH:
-	//
-	// handle 
-	//
-	break;
+        case COUNT_UNREAD:
+            //
+            // handle
+            //
+            break;
+        case SEARCH:
+            //
+            // handle
+            //
+            break;
 
-    default:
-	return -ENOTTY;
+        default:
+            return -ENOTTY;
     }
 
     return 0;
 }
 
-loff_t my_llseek(struct file *filp, loff_t offset, int type)
-{
+loff_t my_llseek(struct file *filp, loff_t offset, int type) {
     //
     // Change f_pos field in filp according to offset and type.
     //
