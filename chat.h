@@ -24,7 +24,7 @@ int my_ioctl(struct inode *inode, struct file *filp, unsigned int cmd, unsigned 
 loff_t my_llseek(struct file *, loff_t, int);
 
 struct message_t {
-    pid_t pid;
+    pid_t pid;  // the sender
     time_t timestamp;
     char message[MAX_MESSAGE_LENGTH];
 };
