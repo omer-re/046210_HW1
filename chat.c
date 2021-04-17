@@ -36,6 +36,8 @@ struct file_operations my_fops = {
 };
 
 
+// TODO: linked list of message_t
+// this is actually a node of the list
 struct Messages_List {
     struct Messages_List *prev;
     struct Messages_List *next;
@@ -44,6 +46,7 @@ struct Messages_List {
 
 
 // each minor is a chatroom
+// this is also the header of the messages linked list
 struct Chat_Room {
     unsigned int minor_id;  // the room's ID
     unsigned int participants_number;
@@ -51,12 +54,13 @@ struct Chat_Room {
     // linked list of messages
     struct Messages_List *messages_list;
     struct message_t *head_message;
+    struct message_t *tail_message;
+
     struct message_t *current_message;  // like iterator
 };
 
 
 
-// TODO: linked list of message_t
 
 // taking advantage of the fact minors are in the range of [0-255]
 Chat_Room chat_rooms[MAX_ROOMS_POSSIBLE];
@@ -119,6 +123,7 @@ int my_open(struct inode *inode, struct file *filp) {
     unsigned int minor_found = 0;
     unsigned int i = 0;    // scan list of existing rooms to see if new room is needed
     unsigned int first_empty_index = 0;    // scan list of existing rooms to see if new room is needed
+
     for (i = 0; i < MAX_ROOMS_POSSIBLE; i++)
     {
 
@@ -146,6 +151,7 @@ int my_open(struct inode *inode, struct file *filp) {
         new_chat_room->participants_number = 1;
         new_chat_room->minor_id = minor;
 
+        // create a messages list object
         new_chat_room->messages_list = (Messages_List *) kmalloc(sizeof(struct Messages_List),
                                                                  GFP_KERNEL);  // TODO: make sure it's the right casting
         // kmalloc validation
@@ -154,6 +160,7 @@ int my_open(struct inode *inode, struct file *filp) {
             return -ENOMEM;
         }
 
+        // create a messages pointer
         new_chat_room->messages_list->message_pointer = (message_t *) kmalloc(sizeof(struct message_t),
                                                                               GFP_KERNEL);  // TODO: make sure it's the right casting
         // kmalloc validation
@@ -162,8 +169,10 @@ int my_open(struct inode *inode, struct file *filp) {
             return -ENOMEM;
         }
 
-        new_chat_room->current_message = new_chat_room->head_message
-        messages_list->message_pointer;  //  pointer to first message
+        new_chat_room->current_message = new_chat_room->head_message;
+        new_chat_room->tail_message = new_chat_room->head_message;
+        messages_list->message_pointer = new_chat_room->head_message;  //  pointer to first message
+
 
         // kmalloc validation
         if (new_chat_room->current_message == NULL)
@@ -227,6 +236,14 @@ ssize_t my_read(struct file *filp, char *buf, size_t count, loff_t *f_pos) {
     //
     // Do read operation.
 
+    // validate legal message
+
+    // create new message object
+
+    // add null char at the end of the buff
+
+    // place it at the messages list
+    // change new_chat_room->tail_message
 
 
     // Return number of bytes read.
@@ -254,10 +271,111 @@ int my_ioctl(struct inode *inode, struct file *filp, unsigned int cmd, unsigned 
     return 0;
 }
 
-loff_t my_llseek(struct file *filp, loff_t offset, int type) {
+
+//loff_t my_llseek(struct file *filp, loff_t offset, int type) { //TODO: can we access chat_room and not filp?
+loff_t my_llseek(struct Chat_Room *chat_room, loff_t offset, int type) {
     //
     // Change f_pos field in filp according to offset and type.
     //
+
+    int steps = offset / sizeof(struct message_t);
+
+    // assure valid file pointer
+    if (flip != NULL);
+    switch (type)
+    {
+        // move Chat_Room.head_message+ offset steps
+        case SEEK_SET:
+            //
+
+            struct Messages_List *iter = chat_room->head_message;
+            for (i = 0; i < abs(steps); i++)
+            {
+
+
+                if (steps > 0)
+                {
+                    iter = iter->next;
+
+                    if (iter == NULL)
+                    { // going out of boundaries - end side
+                        chat_room->current_message = iter;
+                        return -EINVAL
+                    }
+                }
+                else
+                {
+                    printf("Negative offset on SEEK_SET"); //todo: remove before handing
+                }
+
+            }
+            //
+            break;
+
+            // move Chat_Room.current_message+ offset steps
+        case SEEK_CUR:
+            //
+            struct Messages_List *iter = chat_room->current_message;
+            for (i = 0; i < abs(steps); i++)
+            {
+                if (steps > 0)
+                {
+                    iter = iter->next;
+
+                    if (iter == NULL)
+                    { // going out of boundaries - end side
+                        chat_room->current_message = iter;
+                        return -EINVAL
+                    }
+                }
+                else if (steps < 0)
+                {
+                    iter = iter->prev;
+
+                    if (iter == chat_room->head_message)
+                    { // going out of boundaries - beginning side
+                        chat_room->current_message = chat_room->head_message;
+                        return -EINVAL
+                    }
+                }
+            }            //
+            break;
+
+            // move Chat_Room.tail_message+ offset steps //TODO note that it will most likely be a negative number
+        case SEEK_END:
+            //
+
+            //go to end, then step back
+            struct Messages_List *iter = chat_room->current_message;
+            while (iter != NULL)
+            {
+                iter = iter->next;
+            }
+            for (i = 0; i < abs(steps); i++)
+            {
+
+                if (steps < 0)
+                {
+                    iter = iter->prev;
+
+                    if (iter == chat_room->head_message)
+                    { // going out of boundaries - beginning side
+                        chat_room->current_message = chat_room->head_message;
+                        return -EINVAL
+                    }
+                }
+                else
+                {
+                    printf("Positive offset on SEEK_END"); //todo: remove before handing
+                }
+            }
+            //
+            break;
+
+        default:
+            return -ENOTTY;
+    }
+
     return -EINVAL;
 }
 
