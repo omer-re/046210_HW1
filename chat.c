@@ -60,8 +60,6 @@ struct Chat_Room {
 };
 
 
-
-
 // taking advantage of the fact minors are in the range of [0-255]
 Chat_Room chat_rooms[MAX_ROOMS_POSSIBLE];
 
@@ -271,7 +269,12 @@ int my_ioctl(struct inode *inode, struct file *filp, unsigned int cmd, unsigned 
     return 0;
 }
 
-
+/**
+ * @param chat_room
+ * @param offset in bytes
+ * @param type - command (SET, CUR, END)
+ * @return for correct command- returns the offset in bytes from the beginning of the file
+ */
 //loff_t my_llseek(struct file *filp, loff_t offset, int type) { //TODO: can we access chat_room and not filp?
 loff_t my_llseek(struct Chat_Room *chat_room, loff_t offset, int type) {
     //
@@ -289,6 +292,8 @@ loff_t my_llseek(struct Chat_Room *chat_room, loff_t offset, int type) {
             //
 
             struct Messages_List *iter = chat_room->head_message;
+            int step_count = 0;
+
             for (i = 0; i < abs(steps); i++)
             {
 
@@ -296,6 +301,7 @@ loff_t my_llseek(struct Chat_Room *chat_room, loff_t offset, int type) {
                 if (steps > 0)
                 {
                     iter = iter->next;
+                    step_count++;
 
                     if (iter == NULL)
                     { // going out of boundaries - end side
@@ -309,19 +315,24 @@ loff_t my_llseek(struct Chat_Room *chat_room, loff_t offset, int type) {
                 }
 
             }
+
+            // position in file in bytes
+            int file_pos = step_count * sizeof(struct message_t);
+            return file_pos;
             //
             break;
 
             // move Chat_Room.current_message+ offset steps
         case SEEK_CUR:
             //
+            int step_count = 0;
             struct Messages_List *iter = chat_room->current_message;
             for (i = 0; i < abs(steps); i++)
             {
                 if (steps > 0)
                 {
                     iter = iter->next;
-
+                    step_count++;
                     if (iter == NULL)
                     { // going out of boundaries - end side
                         chat_room->current_message = iter;
@@ -331,6 +342,7 @@ loff_t my_llseek(struct Chat_Room *chat_room, loff_t offset, int type) {
                 else if (steps < 0)
                 {
                     iter = iter->prev;
+                    step_count--;
 
                     if (iter == chat_room->head_message)
                     { // going out of boundaries - beginning side
@@ -338,18 +350,24 @@ loff_t my_llseek(struct Chat_Room *chat_room, loff_t offset, int type) {
                         return -EINVAL
                     }
                 }
-            }            //
+
+            }
+            // position in file in bytes
+            int file_pos = step_count * sizeof(struct message_t);
+            return file_pos;
+
             break;
 
             // move Chat_Room.tail_message+ offset steps //TODO note that it will most likely be a negative number
         case SEEK_END:
             //
-
+            int step_count = 0;
             //go to end, then step back
             struct Messages_List *iter = chat_room->current_message;
             while (iter != NULL)
             {
                 iter = iter->next;
+                step_count++;
             }
             for (i = 0; i < abs(steps); i++)
             {
@@ -357,7 +375,7 @@ loff_t my_llseek(struct Chat_Room *chat_room, loff_t offset, int type) {
                 if (steps < 0)
                 {
                     iter = iter->prev;
-
+                    step_count--;
                     if (iter == chat_room->head_message)
                     { // going out of boundaries - beginning side
                         chat_room->current_message = chat_room->head_message;
@@ -369,7 +387,10 @@ loff_t my_llseek(struct Chat_Room *chat_room, loff_t offset, int type) {
                     printf("Positive offset on SEEK_END"); //todo: remove before handing
                 }
             }
-            //
+
+            // position in file in bytes
+            int file_pos = step_count * sizeof(struct message_t);
+            return file_pos;
             break;
 
         default:
