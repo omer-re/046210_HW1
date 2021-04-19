@@ -52,10 +52,10 @@ struct Chat_Room {
 
     // linked list of messages
     struct Message_Node *messages_node;
-    struct message_t *head_message;
-    struct message_t *tail_message;
+    struct Message_Node *head_message;
+    struct Message_Node *tail_message;
 
-    struct message_t *current_message;  // like iterator
+    struct Message_Node *current_message;  // like iterator
 };
 
 
@@ -89,7 +89,7 @@ void cleanup_module(void) {
     // before leaving free list
     for (i = 0; i < MAX_ROOMS_POSSIBLE; i++)
     {
-        if (chat_rooms[i]->minor_id == NULL)
+        if (chat_rooms[i]->minor_id != NULL)
         {
             struct Message_Node *iter = chat_rooms[i]->messages_node->head_message;
 
@@ -117,25 +117,21 @@ void cleanup_module(void) {
 int my_open(struct inode *inode, struct file *filp) {
     // check if this minor number is already exist.
     unsigned int minor = MINOR(inode->i_rdev);
-    unsigned int minor_found = 0;
-    unsigned int i = 0;    // scan list of existing rooms to see if new room is needed
-    unsigned int first_empty_index = 0;    // scan list of existing rooms to see if new room is needed
 
-    for (i = 0; i < MAX_ROOMS_POSSIBLE; i++)
+    //unsigned int minor_found = 0;
+    //unsigned int i = 0;    // scan list of existing rooms to see if new room is needed
+    //unsigned int first_empty_index = 0;    // scan list of existing rooms to see if new room is needed
+
+
+    // means room exists
+    if (chat_rooms[minor] != NULL)
     {
-
-        // save the first available minor that's free
-        if (chat_rooms[i]->minor_id == NULL)
-        {  // first empty index
-            first_empty_index = i;
-            return 0;
-
-        }
-
+        chat_rooms[minor]->participants_number++;
     }
 
-    // means end of list and no match
-    if (i == 255 && minor_found != 1)
+
+        // if the room doesn't exist
+    else if (chat_rooms[minor] == NULL)
     {
         // if not - create room\chat\messages list
         //new chatroom element
@@ -145,6 +141,7 @@ int my_open(struct inode *inode, struct file *filp) {
         {
             return -EFAULT;
         }
+
         new_chat_room->participants_number = 1;
         new_chat_room->minor_id = minor;
 
@@ -178,9 +175,10 @@ int my_open(struct inode *inode, struct file *filp) {
         }
 
         // all kmallocs are successful
-        chat_rooms[first_empty_index] = new_chat_room;
+        chat_rooms[minor] = new_chat_room;
 
     }
+
 
     return 0;
 }
@@ -188,40 +186,37 @@ int my_open(struct inode *inode, struct file *filp) {
 
 // when one participant only leaves a room
 int my_release(struct inode *inode, struct file *filp) {
+
+    unsigned int minor = MINOR(inode->i_rdev);
+
     // handle file closing
 
     // scan minor list for the minor number we would like to close
-    for (i = 0; i < MAX_ROOMS_POSSIBLE; i++)
-    {
-        if (chat_rooms[i]->minor_id == minor)
-        {  // if it does - join the room
-            if (chat_rooms[i]->minor_id.participants_number > 1)
-            {  // leaver isn't the last one
-                // else if there still others in the room - participants-=1
-                chat_rooms[i]->minor_id.participants_number -= 1;
-            }
-            else
-            {  // if it has only 1 participant - release it like linked list element and kfree(iter and private data)
 
-                struct Message_Node *iter = chat_rooms[i]->messages_node->head_message;
 
-                // free all messages
-                while (iter != NULL)
-                {
-                    iter = iter->next;
-                    kfree(iter->message_pointer);  //TODO: need &(iter->message_pointer)?
-                    kfree(iter->prev);
+    if (chat_rooms[minor]->minor_id.participants_number > 1)
+    {  // leaver isn't the last one
+        // else if there still others in the room - participants-=1
+        chat_rooms[minor]->minor_id.participants_number -= 1;
+    }
+    else
+    {  // if it has only 1 participant - release it like linked list element and kfree(iter and private data)
 
-                }
-                // free the list
-                kfree(chat_rooms[i]->messages_node)
-                // assign room as free
-                chat_rooms[i] = NULL
-            }
+        struct Message_Node *iter = chat_rooms[minor]->messages_node->head_message;
+
+        // free all messages
+        while (iter != NULL)
+        {
+            iter = iter->next;
+            kfree(iter->message_pointer);  //TODO: need &(iter->message_pointer)?
+            kfree(iter->prev);
 
         }
+        // free the list
+        kfree(chat_rooms[minor]->messages_node)
+        // assign room as free
+        chat_rooms[minor] = NULL
     }
-
     return 0;
 }
 
@@ -287,12 +282,13 @@ int my_ioctl(struct inode *inode, struct file *filp, unsigned int cmd, unsigned 
  * @param type - command (SET, CUR, END)
  * @return for correct command- returns the offset in bytes from the beginning of the file
  */
-//loff_t my_llseek(struct file *filp, loff_t offset, int type) { //TODO: can we access chat_room and not filp?
-loff_t my_llseek(struct Chat_Room *chat_room, loff_t offset, int type) {
+loff_t my_llseek(struct file *filp, loff_t offset, int type) { //TODO: can we access chat_room and not filp?
+//loff_t my_llseek(struct Chat_Room *chat_room, loff_t offset, int type) {
     //
     // Change f_pos field in filp according to offset and type.
     //
-
+    int minor = MINOR(filp->f_dentry->d_inode->i_rdev);
+    struct Chat_Room chat_room[minor];  // TODO is this a proper type? by ref?
     int steps = offset / sizeof(struct message_t);
 
     // assure valid file pointer
@@ -306,33 +302,31 @@ loff_t my_llseek(struct Chat_Room *chat_room, loff_t offset, int type) {
             struct Message_Node *iter = chat_room->head_message;
             int step_count = 0;
 
-            for (i = 0; i < abs(steps); i++)
+            if (steps > 0)
             {
-
-
-                if (steps > 0)
+                for (i = 0; i < abs(steps); i++)
                 {
                     iter = iter->next;
                     step_count++;
-
                     if (iter == NULL)
                     { // going out of boundaries - end side
                         chat_room->current_message = iter;
-                        return -EINVAL
+                        break;
                     }
                 }
-                else
-                {
-                    printf("Negative offset on SEEK_SET"); //todo: remove before handing
-                }
-
+            }
+            else if (steps < 0)
+            {
+                chat_room->current_message = chat_room->head_message;
             }
 
+
+
             // position in file in bytes
-            int file_pos = step_count * sizeof(struct message_t);
+            loff_t file_pos = step_count * sizeof(struct message_t);
+            filp->f_pos = file_pos;  // TODO is casting right?
             return file_pos;
             //
-            break;
 
             // move Chat_Room.current_message+ offset steps
         case SEEK_CUR:
@@ -348,7 +342,11 @@ loff_t my_llseek(struct Chat_Room *chat_room, loff_t offset, int type) {
                     if (iter == NULL)
                     { // going out of boundaries - end side
                         chat_room->current_message = iter;
-                        return -EINVAL
+                        break;
+                    }
+                    else
+                    {
+                        chat_room->current_message = iter;
                     }
                 }
                 else if (steps < 0)
@@ -359,16 +357,18 @@ loff_t my_llseek(struct Chat_Room *chat_room, loff_t offset, int type) {
                     if (iter == chat_room->head_message)
                     { // going out of boundaries - beginning side
                         chat_room->current_message = chat_room->head_message;
-                        return -EINVAL
+                        break;
                     }
+                    chat_room->current_message = iter;
                 }
 
             }
             // position in file in bytes
-            int file_pos = step_count * sizeof(struct message_t);
+            loff_t file_pos = step_count * sizeof(struct message_t);
+            filp->f_pos = file_pos;  // TODO is casting right?
             return file_pos;
 
-            break;
+
 
             // move Chat_Room.tail_message+ offset steps //TODO note that it will most likely be a negative number
         case SEEK_END:
@@ -381,35 +381,37 @@ loff_t my_llseek(struct Chat_Room *chat_room, loff_t offset, int type) {
                 iter = iter->next;
                 step_count++;
             }
-            for (i = 0; i < abs(steps); i++)
+            if (steps < 0)
             {
 
-                if (steps < 0)
+                for (i = 0; i < abs(steps); i++)
                 {
                     iter = iter->prev;
                     step_count--;
                     if (iter == chat_room->head_message)
                     { // going out of boundaries - beginning side
                         chat_room->current_message = chat_room->head_message;
-                        return -EINVAL
+                        break;
                     }
+                    chat_room->current_message = iter;
                 }
-                else
-                {
-                    printf("Positive offset on SEEK_END"); //todo: remove before handing
-                }
+            }
+            else if (steps > 0)
+            {
+                chat_room->current_message = chat_room->tail_message->next;
             }
 
             // position in file in bytes
-            int file_pos = step_count * sizeof(struct message_t);
+            loff_t file_pos = step_count * sizeof(struct message_t);
+            filp->f_pos = file_pos;  // TODO is casting right?
             return file_pos;
-            break;
+
 
         default:
             return -EINVAL;
     }
-
 }
+
 
 time_t gettime() {
     do_gettimeofday(&tv);
