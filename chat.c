@@ -36,11 +36,10 @@ struct file_operations my_fops = {
 };
 
 
-// TODO: linked list of message_t
 // this is actually a node of the list
-struct Messages_List {
-    struct Messages_List *prev;
-    struct Messages_List *next;
+struct Message_Node {
+    struct Message_Node *prev;
+    struct Message_Node *next;
     struct message_t *message_pointer;
 };
 
@@ -52,7 +51,7 @@ struct Chat_Room {
     unsigned int participants_number;
 
     // linked list of messages
-    struct Messages_List *messages_list;
+    struct Message_Node *messages_node;
     struct message_t *head_message;
     struct message_t *tail_message;
 
@@ -92,7 +91,7 @@ void cleanup_module(void) {
     {
         if (chat_rooms[i]->minor_id == NULL)
         {
-            struct Messages_List *iter = chat_rooms[i]->messages_list->head_message;
+            struct Message_Node *iter = chat_rooms[i]->messages_node->head_message;
 
             // free all messages
             while (iter != NULL)
@@ -103,7 +102,7 @@ void cleanup_module(void) {
 
             }
             // free the list
-            kfree(chat_rooms[i]->messages_list)
+            kfree(chat_rooms[i]->messages_node)
             // assign room as free
             chat_rooms[i] = NULL
         }
@@ -150,26 +149,26 @@ int my_open(struct inode *inode, struct file *filp) {
         new_chat_room->minor_id = minor;
 
         // create a messages list object
-        new_chat_room->messages_list = (Messages_List *) kmalloc(sizeof(struct Messages_List),
-                                                                 GFP_KERNEL);  // TODO: make sure it's the right casting
+        new_chat_room->messages_node = (Message_Node *) kmalloc(sizeof(struct Message_Node),
+                                                                GFP_KERNEL);  // TODO: make sure it's the right casting
         // kmalloc validation
-        if (new_chat_room->messages_list == NULL)
+        if (new_chat_room->messages_node == NULL)
         {
             return -ENOMEM;
         }
 
         // create a messages pointer
-        new_chat_room->messages_list->message_pointer = (message_t *) kmalloc(sizeof(struct message_t),
+        new_chat_room->messages_node->message_pointer = (message_t *) kmalloc(sizeof(struct message_t),
                                                                               GFP_KERNEL);  // TODO: make sure it's the right casting
         // kmalloc validation
-        if (new_chat_room->messages_list->message_pointer == NULL)
+        if (new_chat_room->messages_node->message_pointer == NULL)
         {
             return -ENOMEM;
         }
 
         new_chat_room->current_message = new_chat_room->head_message;
         new_chat_room->tail_message = new_chat_room->head_message;
-        messages_list->message_pointer = new_chat_room->head_message;  //  pointer to first message
+        messages_node->message_pointer = new_chat_room->head_message;  //  pointer to first message
 
 
         // kmalloc validation
@@ -204,7 +203,7 @@ int my_release(struct inode *inode, struct file *filp) {
             else
             {  // if it has only 1 participant - release it like linked list element and kfree(iter and private data)
 
-                struct Messages_List *iter = chat_rooms[i]->messages_list->head_message;
+                struct Message_Node *iter = chat_rooms[i]->messages_node->head_message;
 
                 // free all messages
                 while (iter != NULL)
@@ -215,7 +214,7 @@ int my_release(struct inode *inode, struct file *filp) {
 
                 }
                 // free the list
-                kfree(chat_rooms[i]->messages_list)
+                kfree(chat_rooms[i]->messages_node)
                 // assign room as free
                 chat_rooms[i] = NULL
             }
@@ -247,6 +246,19 @@ ssize_t my_read(struct file *filp, char *buf, size_t count, loff_t *f_pos) {
     // Return number of bytes read.
     return 0;
 }
+
+
+// TODO
+/**
+ * creates message_t obj and push it to buffer
+ * @param filp
+ * @param buf
+ * @param count
+ * @param f_pos
+ * @return
+ */
+ssize_t my_write(struct file *filp, char *buf, size_t count, loff_t *f_pos);
+
 
 int my_ioctl(struct inode *inode, struct file *filp, unsigned int cmd, unsigned long arg) {
     switch (cmd)
@@ -291,7 +303,7 @@ loff_t my_llseek(struct Chat_Room *chat_room, loff_t offset, int type) {
         case SEEK_SET:
             //
 
-            struct Messages_List *iter = chat_room->head_message;
+            struct Message_Node *iter = chat_room->head_message;
             int step_count = 0;
 
             for (i = 0; i < abs(steps); i++)
@@ -326,7 +338,7 @@ loff_t my_llseek(struct Chat_Room *chat_room, loff_t offset, int type) {
         case SEEK_CUR:
             //
             int step_count = 0;
-            struct Messages_List *iter = chat_room->current_message;
+            struct Message_Node *iter = chat_room->current_message;
             for (i = 0; i < abs(steps); i++)
             {
                 if (steps > 0)
@@ -363,7 +375,7 @@ loff_t my_llseek(struct Chat_Room *chat_room, loff_t offset, int type) {
             //
             int step_count = 0;
             //go to end, then step back
-            struct Messages_List *iter = chat_room->current_message;
+            struct Message_Node *iter = chat_room->current_message;
             while (iter != NULL)
             {
                 iter = iter->next;
@@ -394,10 +406,9 @@ loff_t my_llseek(struct Chat_Room *chat_room, loff_t offset, int type) {
             break;
 
         default:
-            return -ENOTTY;
+            return -EINVAL;
     }
 
-    return -EINVAL;
 }
 
 time_t gettime() {
