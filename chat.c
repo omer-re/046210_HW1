@@ -35,6 +35,12 @@ struct file_operations my_fops = {
         .llseek = my_llseek
 };
 
+typedef struct my_private_data {
+    struct Message_Node *messages_buff;
+    unsigned int last_read_index;
+} *MyPrivateData;
+
+
 
 // this is actually a node of the list
 struct Message_Node {
@@ -252,21 +258,75 @@ ssize_t my_read(struct file *filp, char *buf, size_t count, loff_t *f_pos) {
  * @param f_pos
  * @return
  */
-ssize_t my_write(struct file *filp, char *buf, size_t count, loff_t *f_pos);
+ssize_t my_write(struct file *filp, const char *buf, size_t count, loff_t *f_pos) {
+    // validate legal message
+
+    // create new message object
+
+    // add null char at the end of the buff
+
+    // place it at the messages list
+    // change new_chat_room->tail_message
+
+
+    unsigned int written = 0, odd = *f_pos & 1;
+
+
+    if (use_mem)
+    {
+        while (written < count)
+            writeb(0xff * ((++written + odd) & 1), address);
+    }
+    else
+    {
+        while (written < count)
+            outb(0xff * ((++written + odd) & 1), address);
+    }
+    *f_pos += count;
+    return written;
+
+
+}
 
 
 int my_ioctl(struct inode *inode, struct file *filp, unsigned int cmd, unsigned long arg) {
+    // get the chat_room number from the inode
+    unsigned int minor = MINOR(inode->i_rdev);
+
     switch (cmd)
     {
+
+
         case COUNT_UNREAD:
             //
-            // handle
-            //
+            // scans for the end of the list
+            struct Message_Node *iter = chat_rooms[minor]->current_message;
+            int steps = 0;
+            while (iter != NULL)
+            {
+                if (iter->next == NULL)
+                {
+                    return steps;
+                }
+                steps++;
+                iter = iter->next;
+            }
             break;
+
         case SEARCH:
-            //
-            // handle
-            //
+
+            // scans the messages_list[i]->message_t.sender==arg
+            struct Message_Node *iter = chat_rooms[minor]->current_message;
+            int steps = 0;
+            while (iter != NULL)
+            {
+                if (iter->message_pointer->pid == arg)
+                {
+                    return steps;
+                }
+                steps++;
+                iter = iter->next;
+            }
             break;
 
         default:
