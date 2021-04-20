@@ -49,7 +49,6 @@ struct Message_Node {
     struct message_t *message_pointer;
 };
 
-
 // each minor is a chatroom
 // this is also the header of the messages linked list
 struct Chat_Room {
@@ -57,7 +56,7 @@ struct Chat_Room {
     unsigned int participants_number;
 
     // linked list of messages
-    struct Message_Node *messages_node;
+    //struct Message_Node *messages_node;  //
     struct Message_Node *head_message;
     struct Message_Node *tail_message;
 
@@ -97,7 +96,7 @@ void cleanup_module(void) {
     {
         if (chat_rooms[i]->minor_id != NULL)
         {
-            struct Message_Node *iter = chat_rooms[i]->messages_node->head_message;
+            struct Message_Node *iter = chat_rooms[i]->head_message;
 
             // free all messages
             while (iter != NULL)
@@ -108,7 +107,7 @@ void cleanup_module(void) {
 
             }
             // free the list
-            kfree(chat_rooms[i]->messages_node)
+            kfree(chat_rooms[i]->head_message)
             // assign room as free
             chat_rooms[i] = NULL
         }
@@ -152,26 +151,25 @@ int my_open(struct inode *inode, struct file *filp) {
         new_chat_room->minor_id = minor;
 
         // create a messages list object
-        new_chat_room->messages_node = (Message_Node *) kmalloc(sizeof(struct Message_Node),
-                                                                GFP_KERNEL);  // TODO: make sure it's the right casting
+        new_chat_room->head_message = (Message_Node *) kmalloc(sizeof(struct Message_Node),
+                                                               GFP_KERNEL);  // TODO: make sure it's the right casting
         // kmalloc validation
-        if (new_chat_room->messages_node == NULL)
+        if (new_chat_room->head_message == NULL)
         {
             return -ENOMEM;
         }
 
         // create a messages pointer
-        new_chat_room->messages_node->message_pointer = (message_t *) kmalloc(sizeof(struct message_t),
-                                                                              GFP_KERNEL);  // TODO: make sure it's the right casting
+        new_chat_room->head_message->message_pointer = (message_t *) kmalloc(sizeof(struct message_t),
+                                                                             GFP_KERNEL);  // TODO: make sure it's the right casting
         // kmalloc validation
-        if (new_chat_room->messages_node->message_pointer == NULL)
+        if (new_chat_room->head_message->message_pointer == NULL)
         {
             return -ENOMEM;
         }
 
         new_chat_room->current_message = new_chat_room->head_message;
         new_chat_room->tail_message = new_chat_room->head_message;
-        messages_node->message_pointer = new_chat_room->head_message;  //  pointer to first message
 
 
         // kmalloc validation
@@ -194,12 +192,7 @@ int my_open(struct inode *inode, struct file *filp) {
 int my_release(struct inode *inode, struct file *filp) {
 
     unsigned int minor = MINOR(inode->i_rdev);
-
     // handle file closing
-
-    // scan minor list for the minor number we would like to close
-
-
     if (chat_rooms[minor]->minor_id.participants_number > 1)
     {  // leaver isn't the last one
         // else if there still others in the room - participants-=1
@@ -208,7 +201,7 @@ int my_release(struct inode *inode, struct file *filp) {
     else
     {  // if it has only 1 participant - release it like linked list element and kfree(iter and private data)
 
-        struct Message_Node *iter = chat_rooms[minor]->messages_node->head_message;
+        struct Message_Node *iter = chat_rooms[minor]->head_message;
 
         // free all messages
         while (iter != NULL)
@@ -219,7 +212,7 @@ int my_release(struct inode *inode, struct file *filp) {
 
         }
         // free the list
-        kfree(chat_rooms[minor]->messages_node)
+        kfree(chat_rooms[minor]->head_message)
         // assign room as free
         chat_rooms[minor] = NULL
     }
@@ -228,23 +221,95 @@ int my_release(struct inode *inode, struct file *filp) {
 
 
 // file *pointer* has a property of "private data" to indicate if it's open, and where we are on the file
+/**
+ *
+ * @param filp
+ * @param buf  - buffer for "copy to user"
+ * @param count number of bytes we'd like to read
+ * @param f_pos
+ * @return
+ **/
 ssize_t my_read(struct file *filp, char *buf, size_t count, loff_t *f_pos) {
     //  our buff is always pointer to message_t
     (struct *message_t)(buf)
     //
-    // Do read operation.
 
-    // validate legal message
+    // go to the right chat room
+    // assuming room number is fine and room exists from my_open
+    int minor = MINOR(filp->f_dentry->d_inode->i_rdev); // which is the chat_room
 
-    // create new message object
+    // go to the last read message according to f_pos by bytes
+    struct Message_Node *iter = chat_rooms[minor]->head_message;
+    int steps = 0;
+    while (iter != NULL)
+    {
+        if (iter->next == NULL)
+        {
+            return steps;
+        }
+        steps++;
+        iter = iter->next;
+    }
 
-    // add null char at the end of the buff
+    size_t num_read_messages = (f_pos / sizeof(message_t));
+    // check how many unread messages are there
+    size_t num_unread_messages = steps - num_read_messages;
+    // check how many messages fit into count
+    size_t num_wanted_messages = (count / sizeof(message_t));
 
-    // place it at the messages list
-    // change new_chat_room->tail_message
+    size_t diff = num_wanted_messages - num_unread_messages;
 
+    if (diff < 0) diff = num_wanted_messages;  //we can provide that number of messages
+    // copy to user
+    if (copy_to_user((void *) buf, (const void *) iter, diff))
+    {
+        printk("Read: Failed to write map to user space.\n");
+        return -EBADF;
+    }
+    // update f_pos
+    // TODO: make sure that is how updating f_pos is done, it's also loff_t+size_t types
+    f_pos = f_pos + diff;
 
-    // Return number of bytes read.
+    return diff;
+}
+
+/**
+ * For each message, gets buffer, validates it, copy from user into messaget obj
+ * After returning with 0 from this function the buffer was copied and it's in the message_t obj
+ * @param pointer to new_message message_t obj which was already created
+ * @param buffer- the string that is the message
+ * @return 0 for proper handling;
+ */
+unsigned int StringHandler(struct message_t *new_message, const char *buffer) {
+
+    // validate proper size
+    unsigned int msg_len = strnlen_user(buffer, MAX_MESSAGE_LENGTH);
+
+    int required_buf = (msg_len); // number of chars needed
+    if (required_buf > MAX_MESSAGE_LENGTH)
+    {
+        return -ENOSPC;
+    }
+
+    if (buffer == NULL)
+    {
+        return -EFAULT;
+    }
+
+    // validate allocation
+    // +1 is for '\' char
+    if (new_message->message == NULL)
+    {
+        return -EFAULT;
+    }
+
+    // copy the string message from the user space buffer to kernel's message_t.message[]
+    if (copy_from_user(buffer, new_message->message, MAX_MESSAGE_LENGTH) != 0)
+    {
+        printk("write: Error on copying from user space.\n");
+        return -EBADF
+    }
+
     return 0;
 }
 
@@ -253,42 +318,66 @@ ssize_t my_read(struct file *filp, char *buf, size_t count, loff_t *f_pos) {
 /**
  * creates message_t obj and push it to buffer
  * @param filp
- * @param buf
+ * @param buf is in size of "count" bytes
  * @param count
  * @param f_pos
  * @return
  */
 ssize_t my_write(struct file *filp, const char *buf, size_t count, loff_t *f_pos) {
-    // validate legal message
 
-    // create new message object
-
-    // add null char at the end of the buff
-
-    // place it at the messages list
-    // change new_chat_room->tail_message
-
-
-    unsigned int written = 0, odd = *f_pos & 1;
-
-
-    if (use_mem)
+    // create a messages pointer
+    struct message_t *new_message = (message_t *) kmalloc(sizeof(struct message_t),
+                                                          GFP_KERNEL);  // TODO: make sure it's the right casting
+    // kmalloc validation
+    if (new_message == NULL)
     {
-        while (written < count)
-            writeb(0xff * ((++written + odd) & 1), address);
+        printk("write: Couldn't allocate mem for input string.\n");
+        return -ENFAULT;
     }
-    else
+
+    int str_hndlr_res = StringHandler(new_message, buf);
+    if (str_hndlr_res != 0)
+    {  // if failed, free new_message
+        kfree(new_message);
+        return str_hndlr_res; // let the original error to bubble up
+    }
+
+    int minor = MINOR(filp->f_dentry->d_inode->i_rdev); // which is the chat_room
+
+    // TODO: who opens the room? where is "my_open" called?
+    // if no where else- we need to create the room here.
+    if (chat_rooms[minor] == NULL)
     {
-        while (written < count)
-            outb(0xff * ((++written + odd) & 1), address);
+        printk("my_open to initiate room is missing!.\n");
     }
-    *f_pos += count;
-    return written;
+
+    new_message->pid = getpid();
+    new_message->timestamp = gettime();
+
+    // create a messages list object
+    struct Message_Node *new_node = (Message_Node *) kmalloc(sizeof(struct Message_Node),
+                                                             GFP_KERNEL);  // TODO: make sure it's the right casting
+    // kmalloc validation
+    if (new_node == NULL)
+    {
+        return -ENOMEM;
+    }
+
+    // put new message in message node
+    new_node->message_pointer = new_message;
+    // append new message node to the messages list, and fix the pointers of the list.
+    new_node->prev = chat_rooms[minor]->tail_message;
+    new_node->next = NULL;
+    chat_rooms[minor]->tail_message.next = new_node;
+
+    // DONE
+
+    return 0;
 
 
 }
 
-
+// TODO: need to fix! count should be done from f_pos, not from current message!
 int my_ioctl(struct inode *inode, struct file *filp, unsigned int cmd, unsigned long arg) {
     // get the chat_room number from the inode
     unsigned int minor = MINOR(inode->i_rdev);
