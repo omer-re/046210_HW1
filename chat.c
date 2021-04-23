@@ -389,6 +389,7 @@ int my_ioctl(struct inode *inode, struct file *filp, unsigned int cmd, unsigned 
         case COUNT_UNREAD:
             //
             // scans for the end of the list
+            // TODO: use pointer arithmetics to start from head+f_pos
             struct Message_Node *iter = chat_rooms[minor]->current_message;
             int steps = 0;
             while (iter != NULL)
@@ -396,6 +397,7 @@ int my_ioctl(struct inode *inode, struct file *filp, unsigned int cmd, unsigned 
                 if (iter->next == NULL)
                 {
                     return steps;
+
                 }
                 steps++;
                 iter = iter->next;
@@ -431,6 +433,7 @@ int my_ioctl(struct inode *inode, struct file *filp, unsigned int cmd, unsigned 
  * @param type - command (SET, CUR, END)
  * @return for correct command- returns the offset in bytes from the beginning of the file
  */
+// TODO: change "current message" to "f_pos"
 loff_t my_llseek(struct file *filp, loff_t offset, int type) { //TODO: can we access chat_room and not filp?
 //loff_t my_llseek(struct Chat_Room *chat_room, loff_t offset, int type) {
     //
