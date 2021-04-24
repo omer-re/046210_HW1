@@ -9,6 +9,8 @@
 #define SEARCH _IO(MY_MAGIC, 1)
 
 #define MAX_MESSAGE_LENGTH 100
+#define MAX_ROOMS_POSSIBLE 256
+
 
 //
 // Function prototypes
@@ -28,4 +30,26 @@ struct message_t {
     time_t timestamp;
     char message[MAX_MESSAGE_LENGTH];
 };
+
+// this is actually a node of the list
+struct Message_Node {
+    struct Message_Node *prev;
+    struct Message_Node *next;
+    struct message_t *message_pointer;
+};
+
+// each minor is a chatroom
+// this is also the header of the messages linked list
+struct Chat_Room {
+    unsigned int minor_id;  // the room's ID
+    unsigned int participants_number;
+
+    // linked list of messages
+    struct Message_Node *head_message;
+    struct Message_Node *tail_message;
+};
+
+// taking advantage of the fact minors are in the range of [0-255]
+struct Chat_Room chat_rooms[MAX_ROOMS_POSSIBLE];
+
 #endif
