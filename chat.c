@@ -41,7 +41,6 @@ typedef struct my_private_data {
 } *MyPrivateData;
 
 
-
 // this is actually a node of the list
 struct Message_Node {
     struct Message_Node *prev;
@@ -243,10 +242,7 @@ ssize_t my_read(struct file *filp, char *buf, size_t count, loff_t *f_pos) {
     int steps = 0;
     while (iter != NULL)
     {
-        if (iter->next == NULL)
-        {
-            return steps;
-        }
+
         steps++;
         iter = iter->next;
     }
@@ -257,20 +253,25 @@ ssize_t my_read(struct file *filp, char *buf, size_t count, loff_t *f_pos) {
     // check how many messages fit into count
     size_t num_wanted_messages = (count / sizeof(message_t));
 
-    size_t diff = num_wanted_messages - num_unread_messages;
+    int diff = num_wanted_messages - num_unread_messages; // diff is number of meesage_t
+
 
     if (diff < 0) diff = num_wanted_messages;  //we can provide that number of messages
+    if (diff > 0) diff = num_unread_messages;  // not enough messages as required, read all unread
+
+    size_t diff_bytes = diff * sizeof(message_t);
+
     // copy to user
-    if (copy_to_user((void *) buf, (const void *) iter, diff))
+    if (copy_to_user((void *) buf, &f_pos, diff_bytes))  // return 0 is error
     {
         printk("Read: Failed to write map to user space.\n");
         return -EBADF;
     }
     // update f_pos
     // TODO: make sure that is how updating f_pos is done, it's also loff_t+size_t types
-    f_pos = f_pos + diff;
+    f_pos = f_pos + diff_bytes;
 
-    return diff;
+    return diff_bytes;
 }
 
 /**
@@ -285,6 +286,19 @@ unsigned int StringHandler(struct message_t *new_message, const char *buffer) {
     // validate proper size
     unsigned int msg_len = strnlen_user(buffer, MAX_MESSAGE_LENGTH);
 
+    if (msg_len < MAX_MESSAGE_LENGTH && buffer[msg_len - 1] != "\0")
+    {  // needs to add it
+        buffer[msg_len - 1] = "\0";
+        //update msg_len
+        msg_len += 1;
+    }
+
+    if (msg_len == 0)
+    {
+        printk("problem with strnlen_user\n");
+
+    }
+
     int required_buf = (msg_len); // number of chars needed
     if (required_buf > MAX_MESSAGE_LENGTH)
     {
@@ -297,7 +311,6 @@ unsigned int StringHandler(struct message_t *new_message, const char *buffer) {
     }
 
     // validate allocation
-    // +1 is for '\' char
     if (new_message->message == NULL)
     {
         return -EFAULT;
@@ -314,7 +327,6 @@ unsigned int StringHandler(struct message_t *new_message, const char *buffer) {
 }
 
 
-// TODO
 /**
  * creates message_t obj and push it to buffer
  * @param filp
@@ -324,6 +336,8 @@ unsigned int StringHandler(struct message_t *new_message, const char *buffer) {
  * @return
  */
 ssize_t my_write(struct file *filp, const char *buf, size_t count, loff_t *f_pos) {
+
+    unsigned int msg_len = strnlen_user(buf, MAX_MESSAGE_LENGTH);
 
     // create a messages pointer
     struct message_t *new_message = (message_t *) kmalloc(sizeof(struct message_t),
@@ -372,7 +386,7 @@ ssize_t my_write(struct file *filp, const char *buf, size_t count, loff_t *f_pos
 
     // DONE
 
-    return 0;
+    return msg_len;  // number of bytes written
 
 
 }
@@ -381,6 +395,7 @@ ssize_t my_write(struct file *filp, const char *buf, size_t count, loff_t *f_pos
 int my_ioctl(struct inode *inode, struct file *filp, unsigned int cmd, unsigned long arg) {
     // get the chat_room number from the inode
     unsigned int minor = MINOR(inode->i_rdev);
+    loff_t curr_fpos = filp->f_pos;
 
     switch (cmd)
     {
@@ -390,7 +405,7 @@ int my_ioctl(struct inode *inode, struct file *filp, unsigned int cmd, unsigned 
             //
             // scans for the end of the list
             // TODO: use pointer arithmetics to start from head+f_pos
-            struct Message_Node *iter = chat_rooms[minor]->current_message;
+            struct Message_Node *iter = curr_fpos;  // TODO: verify proper use of pointers
             int steps = 0;
             while (iter != NULL)
             {
@@ -407,18 +422,21 @@ int my_ioctl(struct inode *inode, struct file *filp, unsigned int cmd, unsigned 
         case SEARCH:
 
             // scans the messages_list[i]->message_t.sender==arg
-            struct Message_Node *iter = chat_rooms[minor]->current_message;
+            struct Message_Node *iter = curr_fpos;
+            size_t num_read_messages = (curr_fpos / sizeof(message_t));
+
             int steps = 0;
             while (iter != NULL)
             {
                 if (iter->message_pointer->pid == arg)
                 {
-                    return steps;
+                    return steps + num_read_messages;
                 }
                 steps++;
                 iter = iter->next;
             }
-            break;
+            return -ENOENT;
+//            break;
 
         default:
             return -ENOTTY;
@@ -433,12 +451,14 @@ int my_ioctl(struct inode *inode, struct file *filp, unsigned int cmd, unsigned 
  * @param type - command (SET, CUR, END)
  * @return for correct command- returns the offset in bytes from the beginning of the file
  */
-// TODO: change "current message" to "f_pos"
-loff_t my_llseek(struct file *filp, loff_t offset, int type) { //TODO: can we access chat_room and not filp?
-//loff_t my_llseek(struct Chat_Room *chat_room, loff_t offset, int type) {
+loff_t my_llseek(struct file *filp, loff_t offset, int type) {
     //
     // Change f_pos field in filp according to offset and type.
     //
+
+    loff_t curr_fpos = filp->f_pos;
+
+
     int minor = MINOR(filp->f_dentry->d_inode->i_rdev);
     struct Chat_Room chat_room[minor];  // TODO is this a proper type? by ref?
     int steps = offset / sizeof(struct message_t);
@@ -462,29 +482,35 @@ loff_t my_llseek(struct file *filp, loff_t offset, int type) { //TODO: can we ac
                     step_count++;
                     if (iter == NULL)
                     { // going out of boundaries - end side
-                        chat_room->current_message = iter;
+                        curr_fpos = step_count * sizeof(message_t);
+//                        chat_room->current_message = iter;
                         break;
                     }
                 }
             }
             else if (steps < 0)
             {
-                chat_room->current_message = chat_room->head_message;
+                curr_fpos = 0;
+//                chat_room->current_message = chat_room->head_message;
             }
 
 
 
             // position in file in bytes
-            loff_t file_pos = step_count * sizeof(struct message_t);
-            filp->f_pos = file_pos;  // TODO is casting right?
-            return file_pos;
+            filp->f_pos = curr_fpos;  // TODO is casting right?
+            return curr_fpos;
             //
 
             // move Chat_Room.current_message+ offset steps
         case SEEK_CUR:
             //
             int step_count = 0;
-            struct Message_Node *iter = chat_room->current_message;
+            int current_message = curr_fpos / sizeof(struct message_t);
+
+            // get to current message
+            struct message_t *current_message = curr_fpos;  // TODO: not sure about pointer arithmetics
+
+
             for (i = 0; i < abs(steps); i++)
             {
                 if (steps > 0)
@@ -493,12 +519,15 @@ loff_t my_llseek(struct file *filp, loff_t offset, int type) { //TODO: can we ac
                     step_count++;
                     if (iter == NULL)
                     { // going out of boundaries - end side
-                        chat_room->current_message = iter;
+                        //current_message = iter;
+                        curr_fpos = curr_fpos + sizeof(message_t);
                         break;
                     }
                     else
                     {
                         chat_room->current_message = iter;
+                        curr_fpos = curr_fpos + sizeof(message_t);
+
                     }
                 }
                 else if (steps < 0)
@@ -508,16 +537,17 @@ loff_t my_llseek(struct file *filp, loff_t offset, int type) { //TODO: can we ac
 
                     if (iter == chat_room->head_message)
                     { // going out of boundaries - beginning side
-                        chat_room->current_message = chat_room->head_message;
+                        curr_fpos = 0;
+//                        chat_room->current_message = chat_room->head_message;
                         break;
                     }
-                    chat_room->current_message = iter;
+                    curr_fpos = curr_fpos - sizeof(message_t);
                 }
 
             }
             // position in file in bytes
-            loff_t file_pos = step_count * sizeof(struct message_t);
-            filp->f_pos = file_pos;  // TODO is casting right?
+//            loff_t file_pos = step_count * sizeof(struct message_t);
+            filp->f_pos = curr_fpos;
             return file_pos;
 
 
@@ -542,21 +572,21 @@ loff_t my_llseek(struct file *filp, loff_t offset, int type) { //TODO: can we ac
                     step_count--;
                     if (iter == chat_room->head_message)
                     { // going out of boundaries - beginning side
-                        chat_room->current_message = chat_room->head_message;
+//                        chat_room->current_message = chat_room->head_message;
+                        curr_fpos = 0;
                         break;
                     }
-                    chat_room->current_message = iter;
+                    curr_fpos = curr_fpos - sizeof(message_t);
                 }
             }
             else if (steps > 0)
             {
-                chat_room->current_message = chat_room->tail_message->next;
+                curr_fpos = curr_fpos + sizeof(message_t);
             }
 
             // position in file in bytes
-            loff_t file_pos = step_count * sizeof(struct message_t);
-            filp->f_pos = file_pos;  // TODO is casting right?
-            return file_pos;
+            filp->f_pos = curr_fpos;
+            return curr_fpos;
 
 
         default:
