@@ -216,11 +216,11 @@ ssize_t my_read(struct file *filp, char *buf, size_t count, loff_t *f_pos) {
         iter = iter->next;
     }
 
-    int num_read_messages = (*f_pos / sizeof(struct message_t));
+    int num_read_messages = ((long) *f_pos / sizeof(struct message_t));
     // check how many unread messages are there
     size_t num_unread_messages = steps - num_read_messages;
     // check how many messages fit into count
-    size_t num_wanted_messages = (count / sizeof(struct message_t));
+    long num_wanted_messages = (count / sizeof(struct message_t));
 
     int diff = num_wanted_messages - num_unread_messages; // diff is number of meesage_t
 
@@ -238,7 +238,7 @@ ssize_t my_read(struct file *filp, char *buf, size_t count, loff_t *f_pos) {
     }
     // update f_pos
     // TODO: make sure that is how updating f_pos is done, it's also loff_t+size_t types
-    f_pos = f_pos + diff_bytes;
+    *f_pos = *f_pos + diff_bytes;
 
     return diff_bytes;
 }
@@ -364,7 +364,8 @@ ssize_t my_write(struct file *filp, const char *buf, size_t count, loff_t *f_pos
 int my_ioctl(struct inode *inode, struct file *filp, unsigned int cmd, unsigned long arg) {
     // get the chat_room number from the inode
     unsigned int minor = MINOR(inode->i_rdev);
-    loff_t curr_fpos = filp->f_pos;
+    //loff_t curr_fpos = filp->f_pos;
+    long curr_fpos = filp->f_pos;
 
     if (cmd == COUNT_UNREAD)
     {
@@ -392,7 +393,7 @@ int my_ioctl(struct inode *inode, struct file *filp, unsigned int cmd, unsigned 
 
         // scans the messages_list[i]->message_t.sender==arg
         struct Message_Node *iter = *((&(chat_rooms[minor].head_message)) + curr_fpos);;
-        size_t num_read_messages = (curr_fpos / sizeof(struct message_t));
+        loff_t num_read_messages = ((long) curr_fpos / (long) sizeof(struct message_t));
 
         int steps = 0;
         while (iter != NULL)
@@ -423,12 +424,11 @@ loff_t my_llseek(struct file *filp, loff_t offset, int type) {
     //
     // Change f_pos field in filp according to offset and type.
     //
-
-    loff_t curr_fpos = filp->f_pos;
-
-
     int minor = MINOR(filp->f_dentry->d_inode->i_rdev);
-    int steps = offset / sizeof(struct message_t);
+
+    //loff_t curr_fpos = filp->f_pos;
+    loff_t curr_fpos = filp->f_pos;
+    loff_t steps = (long) offset / (long) sizeof(struct message_t);
 
     struct Message_Node *iter;
 

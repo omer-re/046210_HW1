@@ -79,8 +79,8 @@ def main():
     # Calculate the ioctl cmd number
     #
     MY_MAGIC = 'r'
-    self.COUNT_UNREAD = _IO(MY_MAGIC, 0)
-    self.SEARCH = _IO(MY_MAGIC, 2)
+    COUNT_UNREAD = _IO(MY_MAGIC, 0)
+    SEARCH = _IO(MY_MAGIC, 1)
        
     # Open the device file
     f = os.open(DEVICE_PATH, os.O_RDWR)
