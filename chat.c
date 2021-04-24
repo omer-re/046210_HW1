@@ -15,6 +15,8 @@
 #include <asm/segment.h>
 #include <asm/current.h>
 #include <linux/slab.h>
+#include <linux/limits.h>
+#include <stdbool.h>
 
 #include "chat.h"
 
@@ -286,7 +288,7 @@ unsigned int StringHandler(struct message_t *new_message, const char *buffer) {
     // if message is shorter than max and has no '/0' - add it.
     if (msg_len < MAX_MESSAGE_LENGTH && buffer[msg_len - 1] != "\0")
     {  // needs to add it
-        new_message->message = "\0";
+        new_message->message[msg_len - 1] = "\0";
 
     }
 
