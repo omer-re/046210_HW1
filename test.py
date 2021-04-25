@@ -81,20 +81,28 @@ def main():
     MY_MAGIC = 'r'
     COUNT_UNREAD = _IO(MY_MAGIC, 0)
     SEARCH = _IO(MY_MAGIC, 1)
-       
+
     # Open the device file
     f = os.open(DEVICE_PATH, os.O_RDWR)
-    
+    print('passed open')
+    print("f={}".format(f))
     # Test write operation
     write_msg = "test"
     ret = os.write(f, write_msg)
+
+
+print('passed os.write with {}'.format(ret))
+
     assert (ret == len(write_msg))
     
     # Read the message we wrote
     message_t_format = 'Hl%ds' % MAX_MESSAGE_LENGTH
     message_t_size = struct.calcsize(message_t_format)
     message_t = os.read(f, 1*message_t_size)
+print('passed os.read')
+
     pid, timestamp, read_msg = struct.unpack(message_t_format, message_t)
+print('pid: {} \ttimestamp: {}\t read_msg: {}'.format(pid, timestamp, read_msg))
     read_msg = read_msg.split('\0', 1)[0] # Remove NULL padding
     assert (read_msg == write_msg)
 

@@ -22,6 +22,10 @@
 
 #define MY_DEVICE "chat"
 
+#define DEBUGEH
+
+
+
 MODULE_AUTHOR("Anonymous");
 MODULE_LICENSE("GPL");
 
@@ -63,12 +67,17 @@ int init_module(void) {
 
     }
     printk("Device driver registered - called from insmod\n");
-
+#ifdef DEBUGEH
+    printk("\nDEBUGEH: initialzing module\n");
+#endif
     return 0;
 }
 
 
 void cleanup_module(void) {
+#ifdef DEBUGEH
+    printk("\nDEBUGEH: Cleanup\n");
+#endif
     unregister_chrdev(my_major, MY_DEVICE);
     // before leaving free list
     int i = 0;
@@ -96,6 +105,10 @@ void cleanup_module(void) {
         //kfree(chat_rooms);
     }
     // all allocations been released.
+
+#ifdef DEBUGEH
+    printk("\nDEBUGEH: Cleanup done\n");
+#endif
     return;
 }
 
@@ -103,7 +116,9 @@ void cleanup_module(void) {
 int my_open(struct inode *inode, struct file *filp) {
     // check if this minor number is already exist.
     unsigned int minor = MINOR(inode->i_rdev);
-
+#ifdef DEBUGEH
+    printk("\nDEBUGEH: my_open, minor %d, participants num: %d\n", minor, chat_rooms[minor].participants_number);
+#endif
     //unsigned int minor_found = 0;
     //unsigned int i = 0;    // scan list of existing rooms to see if new room is needed
     //unsigned int first_empty_index = 0;    // scan list of existing rooms to see if new room is needed
@@ -123,33 +138,36 @@ int my_open(struct inode *inode, struct file *filp) {
 
         //new chatroom element
         //Chat_Room new_chat_room = (Chat_Room *) kmalloc(sizeof(struct Chat_Room), GFP_KERNEL);
-        struct Chat_Room new_chat_room = chat_rooms[minor];
+        //struct Chat_Room* new_chat_room = chat_rooms[minor];
 
-        new_chat_room.participants_number = 1;
-        new_chat_room.minor_id = minor;
+        chat_rooms[minor].participants_number = 1;
+        chat_rooms[minor].minor_id = minor;
 
         // create a messages list object
-        new_chat_room.head_message = (struct Message_Node *) kmalloc(sizeof(struct Message_Node),
-                                                                     GFP_KERNEL);  // TODO: make sure it's the right casting
+        chat_rooms[minor].head_message = (struct Message_Node *) kmalloc(sizeof(struct Message_Node),
+                                                                         GFP_KERNEL);  // TODO: make sure it's the right casting
         // kmalloc validation
-        if (new_chat_room.head_message == NULL)
+        if (chat_rooms[minor].head_message == NULL)
         {
             return -ENOMEM;
         }
 
         // create a messages pointer
-        new_chat_room.head_message->message_pointer = (struct message_t *) kmalloc(sizeof(struct message_t),
-                                                                                   GFP_KERNEL);  // TODO: make sure it's the right casting
+        chat_rooms[minor].head_message->message_pointer = (struct message_t *) kmalloc(sizeof(struct message_t),
+                                                                                       GFP_KERNEL);  // TODO: make sure it's the right casting
         // kmalloc validation
-        if (new_chat_room.head_message->message_pointer == NULL)
+        if (chat_rooms[minor].head_message->message_pointer == NULL)
         {
             return -ENOMEM;
         }
 
-        new_chat_room.tail_message = new_chat_room.head_message;
+        chat_rooms[minor].tail_message = chat_rooms[minor].head_message;
 
         // all kmallocs are successful
-        chat_rooms[minor] = new_chat_room;
+        //chat_rooms[minor] = chat_rooms[minor];
+#ifdef DEBUGEH
+        printk("\nDEBUGEH: my_open, is done\n");
+#endif
 
     }
 
@@ -307,6 +325,7 @@ unsigned int StringHandler(struct message_t *new_message, const char *buffer) {
 ssize_t my_write(struct file *filp, const char *buf, size_t count, loff_t *f_pos) {
 
     unsigned int msg_len = strnlen_user(buf, MAX_MESSAGE_LENGTH);
+    printk("write: Couldn't allocate mem for input string.\n");
 
     // create a messages pointer
     struct message_t *new_message = (struct message_t *) kmalloc(sizeof(struct message_t),
@@ -528,12 +547,8 @@ loff_t my_llseek(struct file *filp, loff_t offset, int type) {
             int step_count = 0;
             //go to end, then step back
         iter = chat_rooms[minor].tail_message;
-//            while (iter != NULL)
-//            {
-//                iter = iter->next;
-//                step_count++;
-//            }
-            if (steps < 0)
+
+        if (steps < 0)
             {
                 int i = 0;
                 for (i = 0; i < abs(steps); i++)
