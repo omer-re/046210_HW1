@@ -68,6 +68,7 @@ int init_module(void) {
 
 
 void cleanup_module(void) {
+
 #ifdef DEBUGEH
     printk("\nDEBUGEH: Cleanup\n");
 #endif
@@ -76,7 +77,7 @@ void cleanup_module(void) {
     int i = 0;
     for (i = 0; i < MAX_ROOMS_POSSIBLE; i++)
     {
-        struct Message_Node *iter_current = chat_rooms[minor].head_message;
+        struct Message_Node *iter_current = chat_rooms[i].head_message;
         struct Message_Node *iter_next = iter_current->next;
 
         if (iter_current != NULL)
@@ -167,9 +168,14 @@ int my_open(struct inode *inode, struct file *filp) {
 // when one participant only leaves a room
 int my_release(struct inode *inode, struct file *filp) {
 #ifdef DEBUGEH
-    printk("\nDEBUGEH: MY_release started\n");
+    printk("\nDEBUGEH: my_release started\n");
 #endif
     unsigned int minor = MINOR(inode->i_rdev);
+#ifdef DEBUGEH
+    printk("\nDEBUGEH: minor:");
+    printk(minor);
+    printk("\n");
+#endif
     // handle file closing
 #ifdef DEBUGEH
     printk("\nDEBUGEH: my_release 183\n");
@@ -243,7 +249,7 @@ ssize_t my_read(struct file *filp, char *buf, size_t count, loff_t *f_pos) {
     //int num_read_messages = ((long) *f_pos / sizeof(struct message_t));
     int num_read_messages = f_pos;
     // check how many unread messages are there
-    int num_unread_messages = chat_rooms[minor].num_of_messages - f_pos;
+    int num_unread_messages = chat_rooms[minor].num_of_messages - num_read_messages;
 
     // check how many messages fit into count
     int num_wanted_messages = (count / sizeof(struct message_t));
@@ -259,7 +265,7 @@ ssize_t my_read(struct file *filp, char *buf, size_t count, loff_t *f_pos) {
     int i = 0;
     struct Message_Node *iter_current = chat_rooms[minor].head_message;
     // promised to be in boundaries, therefore no need checking for NULL
-    for (i = 0; i < f_pos; i++)
+    for (i = 0; i < num_read_messages; i++)
     {
         iter_current = iter_current->next;
     }
@@ -424,6 +430,7 @@ int my_ioctl(struct inode *inode, struct file *filp, unsigned int cmd, unsigned 
         /////  rolling in linked list   ////////
         struct Message_Node *iter_current = chat_rooms[minor].head_message;
         struct Message_Node *iter_next = iter_current->next;
+        int steps = 0;
 
         if (iter_current != NULL)
         {
@@ -431,7 +438,7 @@ int my_ioctl(struct inode *inode, struct file *filp, unsigned int cmd, unsigned 
             {
                 while (iter_next != NULL)  // means we have at least 2 nodes alive
                 {
-                    if (iter->message_pointer->pid == arg)
+                    if (iter_current->message_pointer->pid == arg)
                     {
                         if (steps > curr_fpos)  // found next message from sender
                         {
@@ -558,9 +565,11 @@ loff_t my_llseek(struct file *filp, loff_t offset, int type) {
             return (destination_msg) * sizeof(struct message_t);
 
         }
+    }
 
     else
             return -EINVAL;
+
 
 }
 
@@ -573,5 +582,3 @@ time_t gettime() {
 pid_t getpid() {
     return current->pid;
 }
-
-

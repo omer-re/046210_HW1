@@ -29,6 +29,10 @@ int my_ioctl(struct inode *inode, struct file *filp, unsigned int cmd, unsigned 
 
 loff_t my_llseek(struct file *, loff_t, int);
 
+pid_t getpid();
+
+time_t gettime();
+
 struct message_t {
     pid_t pid;  // the sender
     time_t timestamp;
