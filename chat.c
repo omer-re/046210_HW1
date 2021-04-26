@@ -172,9 +172,7 @@ int my_release(struct inode *inode, struct file *filp) {
 #endif
     unsigned int minor = MINOR(inode->i_rdev);
 #ifdef DEBUGEH
-    printk("\nDEBUGEH: minor:");
-    printk(minor);
-    printk("\n");
+    printk("\nDEBUGEH: minor: %d\n", minor);
 #endif
     // handle file closing
 #ifdef DEBUGEH
@@ -193,30 +191,38 @@ int my_release(struct inode *inode, struct file *filp) {
 #ifdef DEBUGEH
         printk("\nDEBUGEH: my_release 196 else\n");
 #endif
-
-        /////  rolling in linked list   ////////
-        struct Message_Node *iter_current = chat_rooms[minor].head_message;
-        struct Message_Node *iter_next = iter_current->next;
-
-        if (iter_current != NULL)
+        if (chat_rooms[minor].num_of_messages > 0)
         {
-            if (iter_next != NULL)
+            /////  rolling in linked list   ////////
+            struct Message_Node *iter_current = chat_rooms[minor].head_message;
+            struct Message_Node *iter_next = iter_current->next;
+
+            if (iter_current != NULL)
             {
-                // free all messages
-                while (iter_next != NULL)  // means we have at least 2 nodes alive
+                if (iter_next != NULL)
                 {
-                    kfree(iter_current->message_pointer);
-                    iter_current = iter_next;
-                    iter_next = iter_current->next;
+                    // free all messages
+                    while (iter_next != NULL)  // means we have at least 2 nodes alive
+                    {
+                        kfree(iter_current->message_pointer);
+                        iter_current = iter_next;
+                        iter_next = iter_current->next;
+                    }
                 }
+                kfree(iter_current);
             }
-            kfree(iter_current);
+
+            /////  rolling in linked list   ////////
+
+            // assign room as free
+            chat_rooms[minor].participants_number = 0;
         }
-
-        /////  rolling in linked list   ////////
-
-        // assign room as free
-        chat_rooms[minor].participants_number = 0;
+        else
+        {
+#ifdef DEBUGEH
+            printk("\nDEBUGEH: my_release: No messages to release\n");
+#endif
+        }
     }
 #ifdef DEBUGEH
     printk("\nDEBUGEH: done my_release 221 if\n");
@@ -247,7 +253,7 @@ ssize_t my_read(struct file *filp, char *buf, size_t count, loff_t *f_pos) {
     int minor = MINOR(filp->f_dentry->d_inode->i_rdev); // which is the chat_room
 
     //int num_read_messages = ((long) *f_pos / sizeof(struct message_t));
-    int num_read_messages = f_pos;
+    int num_read_messages = *f_pos;
     // check how many unread messages are there
     int num_unread_messages = chat_rooms[minor].num_of_messages - num_read_messages;
 
@@ -278,7 +284,7 @@ ssize_t my_read(struct file *filp, char *buf, size_t count, loff_t *f_pos) {
     }
 
     // update f_pos
-    f_pos += diff;
+    *f_pos += diff;
 
 #ifdef DEBUGEH
     printk("\nDEBUGEH: my_read is done\n");
@@ -329,9 +335,9 @@ unsigned int StringHandler(struct message_t *new_message, const char *buffer) {
     }
 
     // if message is shorter than max and has no '/0' - add it.
-    if (msg_len < MAX_MESSAGE_LENGTH && buffer[msg_len - 1] != "\0")
+    if (msg_len < MAX_MESSAGE_LENGTH && buffer[msg_len - 1] != '\0')
     {  // needs to add it
-        new_message->message[msg_len - 1] = "\0";
+        new_message->message[msg_len - 1] = '\0';
 
     }
 
@@ -430,7 +436,8 @@ int my_ioctl(struct inode *inode, struct file *filp, unsigned int cmd, unsigned 
         /////  rolling in linked list   ////////
         struct Message_Node *iter_current = chat_rooms[minor].head_message;
         struct Message_Node *iter_next = iter_current->next;
-        int steps = 0;
+        int steps;
+        steps = 0;
 
         if (iter_current != NULL)
         {
@@ -459,6 +466,8 @@ int my_ioctl(struct inode *inode, struct file *filp, unsigned int cmd, unsigned 
             return -ENOTTY;
 
     }
+
+    return -EFAULT;
 }
 
 /**
@@ -474,7 +483,10 @@ loff_t my_llseek(struct file *filp, loff_t offset, int type) {
     int minor = MINOR(filp->f_dentry->d_inode->i_rdev);
 
     //loff_t curr_fpos = filp->f_pos;
-    loff_t curr_fpos = filp->f_pos;
+    int curr_fpos = filp->f_pos;
+#ifdef DEBUGEH
+    printk("\nDEBUGEH: my_llseek f_pos: %d\n", curr_fpos);
+#endif
     loff_t messages_offset =
             (long) offset / (long) sizeof(struct message_t);  // promised to be int, mult of sizeof(message_t)
     int destination_msg = curr_fpos + messages_offset;  // the index of the message we will arrive after offset
@@ -523,7 +535,7 @@ loff_t my_llseek(struct file *filp, loff_t offset, int type) {
             return (chat_rooms[minor].num_of_messages + 1) * sizeof(struct message_t);
         }
             // case out of boundaries beginning side
-        else if (destination_msg < 0)
+        else if (destination_msg <= 0)
         { // out of boundaries
             curr_fpos = 0;
             return 0;
@@ -553,10 +565,10 @@ loff_t my_llseek(struct file *filp, loff_t offset, int type) {
             return (chat_rooms[minor].num_of_messages + 1) * sizeof(struct message_t);
         }
 
-        else if (destination_msg < 0)
+        else if (destination_msg <= 0)
         { // out of boundaries
             curr_fpos = 0;
-            return (chat_rooms[minor].num_of_messages + 1) * sizeof(struct message_t);
+            return 0;
         }
 
         else if (messages_offset > 0)
@@ -567,12 +579,15 @@ loff_t my_llseek(struct file *filp, loff_t offset, int type) {
         }
     }
 
-    else
-            return -EINVAL;
+//    else
+//            return -EINVAL;
+#ifdef DEBUGEH
+    printk("\nDEBUGEH: my_llseek returnning  -EINVAL\n");
+#endif
+    return -EINVAL;
 
 
 }
-
 
 time_t gettime() {
     do_gettimeofday(&tv);
