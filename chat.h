@@ -47,6 +47,7 @@ struct Message_Node {
 struct Chat_Room {
     unsigned int minor_id;  // the room's ID
     unsigned int participants_number;
+    unsigned int num_of_messages;
 
     // linked list of messages
     struct Message_Node *head_message;

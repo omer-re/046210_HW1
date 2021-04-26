@@ -41,13 +41,6 @@ struct file_operations my_fops = {
         .llseek = my_llseek
 };
 
-//typedef struct my_private_data {
-//    struct Message_Node *messages_buff;
-//    unsigned int last_read_index;
-//} *MyPrivateData;
-//
-
-
 int init_module(void) {
     my_major = register_chrdev(my_major, MY_DEVICE, &my_fops);
     // from "my_module.c" hw0
@@ -83,19 +76,23 @@ void cleanup_module(void) {
     int i = 0;
     for (i = 0; i < MAX_ROOMS_POSSIBLE; i++)
     {
+        struct Message_Node *iter_current = chat_rooms[minor].head_message;
+        struct Message_Node *iter_next = iter_current->next;
 
-        struct Message_Node *iter = chat_rooms[i].head_message;
-
-        // free all messages
-        while (iter != NULL)
+        if (iter_current != NULL)
         {
-            iter = iter->next;
-            kfree(iter->message_pointer);  //TODO: need &(iter->message_pointer)?
-            kfree(iter->prev);
-
+            if (iter_next != NULL)
+            {
+                // free all messages
+                while (iter_next != NULL)  // means we have at least 2 nodes alive
+                {
+                    kfree(iter_current->message_pointer);
+                    iter_current = iter_next;
+                    iter_next = iter_current->next;
+                }
+            }
+            kfree(iter_current);
         }
-        // free the list
-        kfree(chat_rooms[i].head_message);
         // assign room as free
         chat_rooms[i].participants_number = 0;
 
@@ -119,10 +116,6 @@ int my_open(struct inode *inode, struct file *filp) {
 #ifdef DEBUGEH
     printk("\nDEBUGEH: my_open, minor %d, participants num: %d\n", minor, chat_rooms[minor].participants_number);
 #endif
-    //unsigned int minor_found = 0;
-    //unsigned int i = 0;    // scan list of existing rooms to see if new room is needed
-    //unsigned int first_empty_index = 0;    // scan list of existing rooms to see if new room is needed
-
 
     // means room exists
     if (chat_rooms[minor].participants_number != 0)
@@ -135,11 +128,6 @@ int my_open(struct inode *inode, struct file *filp) {
     else if (chat_rooms[minor].participants_number == 0)
     {
         // if not - create room\chat\messages list
-
-        //new chatroom element
-        //Chat_Room new_chat_room = (Chat_Room *) kmalloc(sizeof(struct Chat_Room), GFP_KERNEL);
-        //struct Chat_Room* new_chat_room = chat_rooms[minor];
-
         chat_rooms[minor].participants_number = 1;
         chat_rooms[minor].minor_id = minor;
 
@@ -178,32 +166,55 @@ int my_open(struct inode *inode, struct file *filp) {
 
 // when one participant only leaves a room
 int my_release(struct inode *inode, struct file *filp) {
-
+#ifdef DEBUGEH
+    printk("\nDEBUGEH: MY_release started\n");
+#endif
     unsigned int minor = MINOR(inode->i_rdev);
     // handle file closing
+#ifdef DEBUGEH
+    printk("\nDEBUGEH: my_release 183\n");
+#endif
     if (chat_rooms[minor].participants_number > 1)
     {  // leaver isn't the last one
+#ifdef DEBUGEH
+        printk("\nDEBUGEH: my_release 188 if\n");
+#endif
         // else if there still others in the room - participants-=1
         chat_rooms[minor].participants_number -= 1;
     }
     else
     {  // if it has only 1 participant - release it like linked list element and kfree(iter and private data)
+#ifdef DEBUGEH
+        printk("\nDEBUGEH: my_release 196 else\n");
+#endif
 
-        struct Message_Node *iter = chat_rooms[minor].head_message;
+        /////  rolling in linked list   ////////
+        struct Message_Node *iter_current = chat_rooms[minor].head_message;
+        struct Message_Node *iter_next = iter_current->next;
 
-        // free all messages
-        while (iter != NULL)
+        if (iter_current != NULL)
         {
-            iter = iter->next;
-            kfree(iter->message_pointer);  //TODO: need &(iter->message_pointer)?
-            kfree(iter->prev);
-
+            if (iter_next != NULL)
+            {
+                // free all messages
+                while (iter_next != NULL)  // means we have at least 2 nodes alive
+                {
+                    kfree(iter_current->message_pointer);
+                    iter_current = iter_next;
+                    iter_next = iter_current->next;
+                }
+            }
+            kfree(iter_current);
         }
-        // free the list
-        kfree(chat_rooms[minor].head_message);
+
+        /////  rolling in linked list   ////////
+
         // assign room as free
         chat_rooms[minor].participants_number = 0;
     }
+#ifdef DEBUGEH
+    printk("\nDEBUGEH: done my_release 221 if\n");
+#endif
     return 0;
 }
 
@@ -218,46 +229,54 @@ int my_release(struct inode *inode, struct file *filp) {
  * @return
  **/
 ssize_t my_read(struct file *filp, char *buf, size_t count, loff_t *f_pos) {
+
+#ifdef DEBUGEH
+    printk("\nDEBUGEH: my_read started\n");
+#endif
+
     //  our buff is always pointer to message_t
 
     // go to the right chat room
     // assuming room number is fine and room exists from my_open
     int minor = MINOR(filp->f_dentry->d_inode->i_rdev); // which is the chat_room
 
-    // go to the last read message according to f_pos by bytes
-    struct Message_Node *iter = chat_rooms[minor].head_message;
-    int steps = 0;
-    while (iter != NULL)
-    {
-
-        steps++;
-        iter = iter->next;
-    }
-
-    int num_read_messages = ((long) *f_pos / sizeof(struct message_t));
+    //int num_read_messages = ((long) *f_pos / sizeof(struct message_t));
+    int num_read_messages = f_pos;
     // check how many unread messages are there
-    size_t num_unread_messages = steps - num_read_messages;
+    int num_unread_messages = chat_rooms[minor].num_of_messages - f_pos;
+
     // check how many messages fit into count
-    long num_wanted_messages = (count / sizeof(struct message_t));
+    int num_wanted_messages = (count / sizeof(struct message_t));
 
     int diff = num_wanted_messages - num_unread_messages; // diff is number of meesage_t
 
-
     if (diff < 0) diff = num_wanted_messages;  //we can provide that number of messages
-    if (diff > 0) diff = num_unread_messages;  // not enough messages as required, read all unread
+    if (diff >= 0) diff = num_unread_messages;  // not enough messages as required, read all unread
 
-    size_t diff_bytes = diff * sizeof(struct message_t);
+    int diff_bytes = diff * sizeof(struct message_t);
+
+    // pointer to f_pos = starting point for copy_to_user
+    int i = 0;
+    struct Message_Node *iter_current = chat_rooms[minor].head_message;
+    // promised to be in boundaries, therefore no need checking for NULL
+    for (i = 0; i < f_pos; i++)
+    {
+        iter_current = iter_current->next;
+    }
 
     // copy to user
-    if (copy_to_user((void *) buf, &f_pos, diff_bytes))  // return 0 is error
+    if (copy_to_user((void *) buf, &iter_current, diff_bytes))  // return 0 is error
     {
         printk("Read: Failed to write map to user space.\n");
         return -EBADF;
     }
-    // update f_pos
-    // TODO: make sure that is how updating f_pos is done, it's also loff_t+size_t types
-    *f_pos = *f_pos + diff_bytes;
 
+    // update f_pos
+    f_pos += diff;
+
+#ifdef DEBUGEH
+    printk("\nDEBUGEH: my_read is done\n");
+#endif
     return diff_bytes;
 }
 
@@ -323,7 +342,9 @@ unsigned int StringHandler(struct message_t *new_message, const char *buffer) {
  * @return
  */
 ssize_t my_write(struct file *filp, const char *buf, size_t count, loff_t *f_pos) {
-
+#ifdef DEBUGEH
+    printk("\nDEBUGEH: My_write started\n");
+#endif
     unsigned int msg_len = strnlen_user(buf, MAX_MESSAGE_LENGTH);
     printk("write: Couldn't allocate mem for input string.\n");
 
@@ -371,6 +392,8 @@ ssize_t my_write(struct file *filp, const char *buf, size_t count, loff_t *f_pos
     new_node->prev = chat_rooms[minor].tail_message;
     new_node->next = NULL;
     chat_rooms[minor].tail_message->next = new_node;
+    chat_rooms[minor].num_of_messages++;
+
 
     // DONE
 
@@ -379,200 +402,162 @@ ssize_t my_write(struct file *filp, const char *buf, size_t count, loff_t *f_pos
 
 }
 
-// TODO: need to fix! count should be done from f_pos, not from current message!
 int my_ioctl(struct inode *inode, struct file *filp, unsigned int cmd, unsigned long arg) {
     // get the chat_room number from the inode
     unsigned int minor = MINOR(inode->i_rdev);
     //loff_t curr_fpos = filp->f_pos;
-    long curr_fpos = filp->f_pos;
+    int curr_fpos = filp->f_pos;  // current index of last read message
 
     if (cmd == COUNT_UNREAD)
     {
-
-        //
-        // scans for the end of the list
-        // TODO: use pointer arithmetics to start from head+f_pos
-        struct Message_Node *iter = *((&(chat_rooms[minor].head_message)) +
-                                      curr_fpos);  // TODO: verify proper use of pointers
-        int steps = 0;
-        while (iter != NULL)
-        {
-            if (iter->next == NULL)
-            {
-                return steps;
-
-            }
-            steps++;
-            iter = iter->next;
-        }
+        int diff = chat_rooms[minor].num_of_messages - curr_fpos;
+        return diff;
     }
 
     else if (cmd == SEARCH)
     {
-
-        // scans the messages_list[i]->message_t.sender==arg
-        struct Message_Node *iter = *((&(chat_rooms[minor].head_message)) + curr_fpos);;
-        loff_t num_read_messages = ((long) curr_fpos / (long) sizeof(struct message_t));
-
-        int steps = 0;
-        while (iter != NULL)
-        {
-            if (iter->message_pointer->pid == arg)
-            {
-                return steps + num_read_messages;
-            }
-            steps++;
-            iter = iter->next;
+        if (curr_fpos == chat_rooms[minor].num_of_messages)
+        {  // end of the list, no further messages with that sender
+            // ended with no result
+            return -ENOENT;
         }
-        return -ENOENT;
+        /////  rolling in linked list   ////////
+        struct Message_Node *iter_current = chat_rooms[minor].head_message;
+        struct Message_Node *iter_next = iter_current->next;
+
+        if (iter_current != NULL)
+        {
+            if (iter_next != NULL)
+            {
+                while (iter_next != NULL)  // means we have at least 2 nodes alive
+                {
+                    if (iter->message_pointer->pid == arg)
+                    {
+                        if (steps > curr_fpos)  // found next message from sender
+                        {
+                            return (curr_fpos + steps) * sizeof(struct message_t);
+                        }
+                        // continue
+                    }
+                    steps++;
+                    iter_current = iter_next;
+                    iter_next = iter_current->next;
+                }
+                // if ended with no result
+                return -ENOENT;
+                /////  rolling in linked list   ////////
+            }
+        }
+        else  // case wrong command
+            return -ENOTTY;
+
     }
-    else
-        return -ENOTTY;
-
-
-    return 0;
 }
 
 /**
+ * F_POS IS THE INDEX OF THE MESSAGE IN THE LIST
+ *
  * @param chat_room
  * @param offset in bytes
  * @param type - command (SET, CUR, END)
  * @return for correct command- returns the offset in bytes from the beginning of the file
  */
 loff_t my_llseek(struct file *filp, loff_t offset, int type) {
-    //
-    // Change f_pos field in filp according to offset and type.
-    //
+
     int minor = MINOR(filp->f_dentry->d_inode->i_rdev);
 
     //loff_t curr_fpos = filp->f_pos;
     loff_t curr_fpos = filp->f_pos;
-    loff_t steps = (long) offset / (long) sizeof(struct message_t);
-
-    struct Message_Node *iter;
+    loff_t messages_offset =
+            (long) offset / (long) sizeof(struct message_t);  // promised to be int, mult of sizeof(message_t)
+    int destination_msg = curr_fpos + messages_offset;  // the index of the message we will arrive after offset
 
     // assure valid file pointer
     if (filp != NULL);
 
-        // move Chat_Room.head_message+ offset steps
+    // check list isn't empty
+    if (chat_rooms[minor].num_of_messages == 0)
+    {
+        return 0;
+    }
+    // move Chat_Room.head_message+ offset steps
+    ///// SEEK_SET  /////////
     if (type == SEEK_SET)
     {
 
-        iter = chat_rooms[minor].head_message;
-            int step_count = 0;
+        if (messages_offset <= 0)
+        {
+            curr_fpos = 0;
+            return 0;
+        }
+        else if (destination_msg > chat_rooms[minor].num_of_messages)
+        { // out of boundaries
+            curr_fpos = chat_rooms[minor].num_of_messages + 1; // TODO: +1 even though there's no message there
+            return (chat_rooms[minor].num_of_messages + 1) * sizeof(struct message_t);
+        }
 
-            if (steps > 0)
-            {
-                int i;
-                for (i = 0; i < abs(steps); i++)
-                {
-                    iter = iter->next;
-                    step_count++;
-                    if (iter == NULL)
-                    { // going out of boundaries - end side
-                        curr_fpos = step_count * sizeof(struct message_t);
-//                        chat_room->current_message = iter;
-                        break;
-                    }
-                }
-            }
-            else if (steps < 0)
-            {
-                curr_fpos = 0;
-//                chat_room->current_message = chat_room->head_message;
-            }
+        else if (destination_msg > 0)
+        {
+            curr_fpos = destination_msg;
+            return (destination_msg) * sizeof(struct message_t);
 
+        }
 
-
-            // position in file in bytes
-            filp->f_pos = curr_fpos;  // TODO is casting right?
-            return curr_fpos;
-            //
     }
-            // move Chat_Room.current_message+ offset steps
+
+        // move Chat_Room.tail_message+ offset steps
+        ///// SEEK_END  /////////
+    else if (type == SEEK_END)
+    {
+        // case out of boundaries end side
+        if (destination_msg >= chat_rooms[minor].num_of_messages)
+        {
+            curr_fpos = chat_rooms[minor].num_of_messages + 1; // TODO: +1 even though there's no message there
+            return (chat_rooms[minor].num_of_messages + 1) * sizeof(struct message_t);
+        }
+            // case out of boundaries beginning side
+        else if (destination_msg < 0)
+        { // out of boundaries
+            curr_fpos = 0;
+            return 0;
+        }
+
+            // case in boundaries
+        else if (destination_msg > 0)
+        {
+            curr_fpos = destination_msg;
+            return (destination_msg) * sizeof(struct message_t);
+
+        }
+
+    }
+
+
+
+        // move Chat_Room.current_message+ offset steps
+        ///// SEEK_CUR /////////
     else if (type == SEEK_CUR)
     {
 
-            int step_count = 0;
-        //int current_message = curr_fpos / sizeof(struct message_t);
 
-            // get to current message
-        iter = *((&(chat_rooms[minor].head_message)) + curr_fpos);
+        if (destination_msg >= chat_rooms[minor].num_of_messages)
+        {
+            curr_fpos = chat_rooms[minor].num_of_messages + 1; // TODO: +1 even though there's no message there
+            return (chat_rooms[minor].num_of_messages + 1) * sizeof(struct message_t);
+        }
 
-        int i = 0;
-            for (i = 0; i < abs(steps); i++)
-            {
-                if (steps > 0)
-                {
-                    iter = iter->next;
-                    step_count++;
-                    if (iter == NULL)
-                    { // going out of boundaries - end side
-                        //current_message = iter;
-                        curr_fpos = curr_fpos + sizeof(struct message_t);
-                        break;
-                    }
-                    else
-                    {
-                        curr_fpos = curr_fpos + sizeof(struct message_t);
+        else if (destination_msg < 0)
+        { // out of boundaries
+            curr_fpos = 0;
+            return (chat_rooms[minor].num_of_messages + 1) * sizeof(struct message_t);
+        }
 
-                    }
-                }
-                else if (steps < 0)
-                {
-                    iter = iter->prev;
-                    step_count--;
+        else if (messages_offset > 0)
+        {
+            curr_fpos = destination_msg;
+            return (destination_msg) * sizeof(struct message_t);
 
-                    if (iter == chat_rooms[minor].head_message)
-                    { // going out of boundaries - beginning side
-                        curr_fpos = 0;
-//                        chat_room->current_message = chat_room->head_message;
-                        break;
-                    }
-                    curr_fpos = curr_fpos - sizeof(struct message_t);
-                }
-
-            }
-            // position in file in bytes
-//            loff_t file_pos = step_count * sizeof(struct message_t);
-            filp->f_pos = curr_fpos;
-        return filp->f_pos;
-    }
-
-
-            // move Chat_Room.tail_message+ offset steps //TODO note that it will most likely be a negative number
-    else if (type == SEEK_END)
-    {
-            //
-            int step_count = 0;
-            //go to end, then step back
-        iter = chat_rooms[minor].tail_message;
-
-        if (steps < 0)
-            {
-                int i = 0;
-                for (i = 0; i < abs(steps); i++)
-                {
-                    iter = iter->prev;
-                    step_count--;
-                    if (iter == chat_rooms[minor].head_message)
-                    { // going out of boundaries - beginning side
-//                        chat_room->current_message = chat_room->head_message;
-                        curr_fpos = 0;
-                        break;
-                    }
-                    curr_fpos = curr_fpos - sizeof(struct message_t);
-                }
-            }
-            else if (steps > 0)
-            {
-                curr_fpos = curr_fpos + sizeof(struct message_t);
-            }
-
-            // position in file in bytes
-            filp->f_pos = curr_fpos;
-            return curr_fpos;
-    }
+        }
 
     else
             return -EINVAL;
@@ -588,3 +573,5 @@ time_t gettime() {
 pid_t getpid() {
     return current->pid;
 }
+
+
