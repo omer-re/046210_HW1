@@ -25,7 +25,6 @@
 #define DEBUGEH
 
 
-
 MODULE_AUTHOR("Anonymous");
 MODULE_LICENSE("GPL");
 
@@ -419,8 +418,6 @@ ssize_t my_write(struct file *filp, const char *buf, size_t count, loff_t *f_pos
     printk("\nDEBUGEH: My_write ended, msg_len is %d\n", msg_len);
 #endif
     return msg_len;  // number of bytes written
-
-
 }
 
 int my_ioctl(struct inode *inode, struct file *filp, unsigned int cmd, unsigned long arg) {
