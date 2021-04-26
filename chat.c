@@ -37,6 +37,7 @@ struct file_operations my_fops = {
         .open = my_open,
         .release = my_release,
         .read = my_read,
+        .write = my_write,
         .ioctl = my_ioctl,
         .llseek = my_llseek
 };
@@ -328,7 +329,7 @@ unsigned int StringHandler(struct message_t *new_message, const char *buffer) {
     }
 
     // copy the string message from the user space buffer to kernel's message_t.message[]
-    if (copy_from_user(buffer, new_message->message, MAX_MESSAGE_LENGTH) != 0)
+    if (copy_from_user(new_message->message, buffer, MAX_MESSAGE_LENGTH) != 0)
     {
         printk("write: Error on copying from user space.\n");
         return -EBADF;
@@ -358,7 +359,7 @@ ssize_t my_write(struct file *filp, const char *buf, size_t count, loff_t *f_pos
     printk("\nDEBUGEH: My_write started\n");
 #endif
     unsigned int msg_len = strnlen_user(buf, MAX_MESSAGE_LENGTH);
-    printk("write: Couldn't allocate mem for input string.\n");
+    //printk("write: Couldn't allocate mem for input string.\n");
 
     // create a messages pointer
     struct message_t *new_message = (struct message_t *) kmalloc(sizeof(struct message_t),
@@ -374,6 +375,9 @@ ssize_t my_write(struct file *filp, const char *buf, size_t count, loff_t *f_pos
     if (str_hndlr_res != 0)
     {  // if failed, free new_message
         kfree(new_message);
+#ifdef DEBUGEH
+        printk("\nDEBUGEH: My_write 379 return res: %d\n", str_hndlr_res);
+#endif
         return str_hndlr_res; // let the original error to bubble up
     }
 
@@ -395,6 +399,9 @@ ssize_t my_write(struct file *filp, const char *buf, size_t count, loff_t *f_pos
     // kmalloc validation
     if (new_node == NULL)
     {
+#ifdef DEBUGEH
+        printk("\nDEBUGEH: My_write return ENOMEM 403\n");
+#endif
         return -ENOMEM;
     }
 
@@ -408,7 +415,9 @@ ssize_t my_write(struct file *filp, const char *buf, size_t count, loff_t *f_pos
 
 
     // DONE
-
+#ifdef DEBUGEH
+    printk("\nDEBUGEH: My_write ended, msg_len is %d\n", msg_len);
+#endif
     return msg_len;  // number of bytes written
 
 
