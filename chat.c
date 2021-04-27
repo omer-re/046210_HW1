@@ -244,6 +244,13 @@ ssize_t my_read(struct file *filp, char *buf, size_t count, loff_t *f_pos) {
 
 #ifdef DEBUGEH
     printk("\nDEBUGEH: my_read started\n");
+    int c = 0;
+    printk("\nDEBUGEH: StringHandler");
+    while (buf[c])
+    {
+        printk("%c", buf[c]);
+    }
+    printk("DEBUGEH: msg_len %d\n", count);
 #endif
 
     //  our buff is always pointer to message_t
@@ -276,6 +283,7 @@ ssize_t my_read(struct file *filp, char *buf, size_t count, loff_t *f_pos) {
         iter_current = iter_current->next;
     }
 
+
     // copy to user
     if (copy_to_user((void *) buf, &iter_current, diff_bytes))  // return 0 is error
     {
@@ -300,9 +308,18 @@ ssize_t my_read(struct file *filp, char *buf, size_t count, loff_t *f_pos) {
  * @return 0 for proper handling;
  */
 unsigned int StringHandler(struct message_t *new_message, const char *buffer) {
-
-    // validate proper size
     unsigned int msg_len = strnlen_user(buffer, MAX_MESSAGE_LENGTH);
+#ifdef DEBUGEH
+    int c = 0;
+    printk("\nDEBUGEH: StringHandler");
+    while (buffer[c])
+    {
+        printk("%c", buffer[c]);
+    }
+    printk("DEBUGEH: msg_len %d\n", msg_len);
+
+#endif
+    // validate proper size
 
     if (msg_len == 0)
     {
@@ -327,12 +344,21 @@ unsigned int StringHandler(struct message_t *new_message, const char *buffer) {
         return -EFAULT;
     }
 
+    // initialize array
+    int d = 0;
+    for (d = 0; c < MAX_MESSAGE_LENGTH; c++)
+    {
+        new_message->message[d] = '\0';
+    }
+
     // copy the string message from the user space buffer to kernel's message_t.message[]
     if (copy_from_user(new_message->message, buffer, MAX_MESSAGE_LENGTH) != 0)
     {
         printk("write: Error on copying from user space.\n");
         return -EBADF;
     }
+
+
 
     // if message is shorter than max and has no '/0' - add it.
     if (msg_len < MAX_MESSAGE_LENGTH && buffer[msg_len - 1] != '\0')
@@ -341,6 +367,16 @@ unsigned int StringHandler(struct message_t *new_message, const char *buffer) {
 
     }
 
+#ifdef DEBUGEH
+    int g = 0;
+    printk("\nDEBUGEH: new_message->message result:");
+    while (new_message->message[g])
+    {
+        printk("%c", new_message->message[g]);
+    }
+    printk("DEBUGEH: end string handler\n");
+
+#endif
     return 0;
 }
 
@@ -382,7 +418,16 @@ ssize_t my_write(struct file *filp, const char *buf, size_t count, loff_t *f_pos
 
     int minor = MINOR(filp->f_dentry->d_inode->i_rdev); // which is the chat_room
 
-    // TODO: who opens the room? where is "my_open" called?
+#ifdef DEBUGEH
+    int c = 0;
+    printk("\nDEBUGEH: MY_WRITE 420 new_message->message result:");
+    while (new_message->message[c])
+    {
+        printk("%c", new_message->message[c]);
+    }
+#endif
+
+
     // if no where else- we need to create the room here.
     if (chat_rooms[minor].participants_number == 0)
     {
