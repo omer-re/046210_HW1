@@ -196,26 +196,33 @@ int my_release(struct inode *inode, struct file *filp) {
     else
     {  // if it has only 1 participant - release it like linked list element and kfree(iter and private data)
 #ifdef DEBUGEH
-        printk("\nDEBUGEH: my_release 196 else\n");
+        printk("\nDEBUGEH: my_release 199 else\n");
 #endif
         if (chat_rooms[minor].num_of_messages > 0)
         {
             /////  rolling in linked list   ////////
             struct Message_Node *iter_current = chat_rooms[minor].head_message;
-            struct Message_Node *iter_next = iter_current->next;
+            //struct Message_Node *iter_next = iter_current->next;
 
             if (iter_current != NULL)
             {
-                if (iter_next != NULL)
-                {
+#ifdef DEBUGEH
+                printk("\nDEBUGEH: my_release 210 if\n");
+#endif
+
+
                     // free all messages
-                    while (iter_next != NULL)  // means we have at least 2 nodes alive
+                int m;
+                for (m = 0; m < chat_rooms[minor].num_of_messages - 1; m++)
+                    // means we have at least 2 nodes alive
                     {
                         kfree(iter_current->message_pointer);
-                        iter_current = iter_next;
-                        iter_next = iter_current->next;
+                        iter_current = iter_current->next;
                     }
-                }
+#ifdef DEBUGEH
+                printk("\nDEBUGEH: my_release 224 done releasing in for\n");
+#endif
+
                 kfree(iter_current);
                 chat_rooms[minor].num_of_messages = 0;
             }
@@ -233,13 +240,12 @@ int my_release(struct inode *inode, struct file *filp) {
         }
     }
 #ifdef DEBUGEH
-    printk("\nDEBUGEH: done my_release 221 if\n");
+    printk("\nDEBUGEH: done my_release 243\n");
 #endif
     return 0;
 }
 
 
-// file *pointer* has a property of "private data" to indicate if it's open, and where we are on the file
 /**
  *
  * @param filp
@@ -250,16 +256,20 @@ int my_release(struct inode *inode, struct file *filp) {
  **/
 ssize_t my_read(struct file *filp, char *buf, size_t count, loff_t *f_pos) {
 
+
 #ifdef DEBUGEH
+    // message loop
     printk("\nDEBUGEH: my_read started\n");
     int c = 0;
-    printk("\nDEBUGEH: StringHandler");
-    while (buf[c])
+    for (c = 0; c < MAX_MESSAGE_LENGTH && buf[c] != '\0'; c++)
     {
         printk("%c", buf[c]);
     }
-    printk("DEBUGEH: msg_len %d\n", count);
+    printk("\nDEBUGEH: msg_len %d\n", count);
+
+
 #endif
+
 
     //  our buff is always pointer to message_t
 
@@ -321,14 +331,19 @@ ssize_t my_read(struct file *filp, char *buf, size_t count, loff_t *f_pos) {
  */
 unsigned int StringHandler(struct message_t *new_message, const char *buffer) {
     unsigned int msg_len = strnlen_user(buffer, MAX_MESSAGE_LENGTH);
+
 #ifdef DEBUGEH
+    // message loop
+    // init message
     int c = 0;
-    printk("\nDEBUGEH: StringHandler");
-    while (buffer[c])
+    printk("\nDEBUGEH: StringHandler beginning");
+    for (c = 0; c < MAX_MESSAGE_LENGTH && new_message->message[c]; c++)
     {
-        printk("%c", buffer[c]);
+        printk("%c", new_message->message[c]);
+        new_message->message[c] = '\0';
     }
     printk("DEBUGEH: msg_len %d\n", msg_len);
+
 
 #endif
     // validate proper size
@@ -356,7 +371,6 @@ unsigned int StringHandler(struct message_t *new_message, const char *buffer) {
         return -EFAULT;
     }
 
-    //TODO: I have init array manually on chat.c for tests.
     if (memset(new_message->message, 0, MAX_MESSAGE_LENGTH) == NULL)
     {
 #ifdef DEBUGEH
@@ -364,13 +378,8 @@ unsigned int StringHandler(struct message_t *new_message, const char *buffer) {
 #endif
     }
 
-    
-// initialize array
-//    int d = 0;
-//    for (d = 0; d < MAX_MESSAGE_LENGTH; d++)
-//    {
-//        new_message->message[d] = '\0';
-//    }
+
+
 
     // copy the string message from the user space buffer to kernel's message_t.message[]
     if (copy_from_user(new_message->message, buffer, MAX_MESSAGE_LENGTH) != 0)
@@ -380,24 +389,28 @@ unsigned int StringHandler(struct message_t *new_message, const char *buffer) {
     }
 
 
-
+//TODO: I think it causes problems on my_test.py line 96
     // if message is shorter than max and has no '/0' - add it.
-    if (msg_len < MAX_MESSAGE_LENGTH && buffer[msg_len - 1] != '\0')
-    {  // needs to add it
-        new_message->message[msg_len - 1] = '\0';
-
-    }
+//    if (msg_len < MAX_MESSAGE_LENGTH && buffer[msg_len - 1] != '\0')
+//    {  // needs to add it
+//        new_message->message[msg_len - 1] = '\0';
+//
+//    }
+//
 
 #ifdef DEBUGEH
-    int g = 0;
-    printk("\nDEBUGEH: new_message->message result:");
-    while (new_message->message[g])
+    // message loop
+    // init message
+    printk("\nDEBUGEH:string handler new_message->message result:\t");
+    for (c = 0; c < MAX_MESSAGE_LENGTH && new_message->message[c]; c++)
     {
-        printk("%c", new_message->message[g]);
+        printk("%c", new_message->message[c]);
     }
-    printk("DEBUGEH: end string handler\n");
+    printk("\nDEBUGEH: end string handler\n");
+
 
 #endif
+
     return 0;
 }
 
@@ -432,7 +445,7 @@ ssize_t my_write(struct file *filp, const char *buf, size_t count, loff_t *f_pos
     {  // if failed, free new_message
         kfree(new_message);
 #ifdef DEBUGEH
-        printk("\nDEBUGEH: My_write 379 return res: %d\n", str_hndlr_res);
+        printk("\nDEBUGEH: My_write 442 return res: %d\n", str_hndlr_res);
 #endif
         return str_hndlr_res; // let the original error to bubble up
     }
@@ -440,12 +453,15 @@ ssize_t my_write(struct file *filp, const char *buf, size_t count, loff_t *f_pos
     int minor = MINOR(filp->f_dentry->d_inode->i_rdev); // which is the chat_room
 
 #ifdef DEBUGEH
+    // message loop
+    // init message
     int c = 0;
-    printk("\nDEBUGEH: MY_WRITE 420 new_message->message result:");
-    while (new_message->message[c])
+    printk("\nDEBUGEH: MY_WRITE 453 new_message->message result:");
+    for (c = 0; c < MAX_MESSAGE_LENGTH && new_message->message[c] != '\0'; c++)
     {
         printk("%c", new_message->message[c]);
     }
+
 #endif
 
 
@@ -483,7 +499,8 @@ ssize_t my_write(struct file *filp, const char *buf, size_t count, loff_t *f_pos
 #ifdef DEBUGEH
     printk("\nDEBUGEH: My_write ended, msg_len is %d\n", msg_len);
 #endif
-    return msg_len;  // number of bytes written
+    if (msg_len >= MAX_MESSAGE_LENGTH) return msg_len;  // number of bytes written
+    else return msg_len - 1;
 }
 
 int my_ioctl(struct inode *inode, struct file *filp, unsigned int cmd, unsigned long arg) {
@@ -519,9 +536,9 @@ int my_ioctl(struct inode *inode, struct file *filp, unsigned int cmd, unsigned 
                 {
                     if (iter_current->message_pointer->pid == arg)
                     {
-                        if (steps > curr_fpos)  // found next message from sender
+                        if (steps >= curr_fpos)  // found next message from sender
                         {
-                            return (curr_fpos + steps) * sizeof(struct message_t);
+                            return (steps) * sizeof(struct message_t);
                         }
                         // continue
                     }
