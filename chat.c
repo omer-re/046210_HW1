@@ -210,14 +210,14 @@ int my_release(struct inode *inode, struct file *filp) {
 #endif
 
 
-                    // free all messages
+                // free all messages
                 int m;
                 for (m = 0; m < chat_rooms[minor].num_of_messages - 1; m++)
                     // means we have at least 2 nodes alive
-                    {
-                        kfree(iter_current->message_pointer);
-                        iter_current = iter_current->next;
-                    }
+                {
+                    kfree(iter_current->message_pointer);
+                    iter_current = iter_current->next;
+                }
 #ifdef DEBUGEH
                 printk("\nDEBUGEH: my_release 224 done releasing in for\n");
 #endif
@@ -258,17 +258,14 @@ ssize_t my_read(struct file *filp, char *buf, size_t count, loff_t *f_pos) {
 
 #ifdef DEBUGEH
     // message loop
-    printk("\nDEBUGEH: my_read started\n");
+    printk("\nDEBUGEH: my_read started empty user buff\n");
     int c = 0;
-    for (c = 0; c < MAX_MESSAGE_LENGTH && buf[c] != '\0'; c++)
+    for (c = 0; c < MAX_MESSAGE_LENGTH; c++)
     {
-        printk("%c", buf[c]);
+        buf[c] = '\0';
     }
     printk("\nDEBUGEH: msg_len %d\n", count);
-
-
 #endif
-
 
     //  our buff is always pointer to message_t
 
@@ -280,7 +277,7 @@ ssize_t my_read(struct file *filp, char *buf, size_t count, loff_t *f_pos) {
     int num_read_messages = *f_pos;
     // check how many unread messages are there
 #ifdef DEBUGEH
-    printk("\nDEBUGEH: my_read massages in room:  %d  num of read messages: %d  \n", chat_rooms[minor].num_of_messages,
+    printk("\nDEBUGEH: my_read messages in room:  %d  num of read messages: %d  \n", chat_rooms[minor].num_of_messages,
            num_read_messages);
 #endif
 
@@ -294,7 +291,7 @@ ssize_t my_read(struct file *filp, char *buf, size_t count, loff_t *f_pos) {
     printk("\nDEBUGEH: my_read wanted is: %d   diff is: %d  \n", num_wanted_messages, diff);
 #endif
     if (diff < 0) diff = num_wanted_messages;  //we can provide that number of messages
-    if (diff >= 0) diff = num_unread_messages;  // not enough messages as required, read all unread
+    else if (diff >= 0) diff = num_unread_messages;  // not enough messages as required, read all unread
 
     int diff_bytes = diff * sizeof(struct message_t);
 
@@ -307,18 +304,36 @@ ssize_t my_read(struct file *filp, char *buf, size_t count, loff_t *f_pos) {
         iter_current = iter_current->next;
     }
 
-
-    // copy to user
-    if (copy_to_user((void *) buf, &iter_current, diff_bytes))  // return 0 is error
+    // in case there are few messages (diff is the num of messages needs to read), read one by one from f_pos
+    for (i = 0; i < diff; i++)
     {
-        printk("Read: Failed to write map to user space.\n");
-        return -EBADF;
-    }
+        // copy to user
+        if (copy_to_user((void *) buf, iter_current->message_pointer, diff_bytes))  // return 0 is error
+        {
+            printk("Read: Failed to write map to user space.\n");
+            return -EBADF;
+        }
+        iter_current = iter_current->next;
 
+    }
     // update f_pos
     *f_pos += diff;
 #ifdef DEBUGEH
     printk("\nDEBUGEH: my_read f_pos is: fpos=%d *fpos=%d\n", (int) f_pos, (int) *f_pos);
+#endif
+
+#ifdef DEBUGEH
+    // message loop
+    printk("\nDEBUGEH: my_read check user buf (should contain message)\n");
+
+    c = 0;
+    for (c = 0; c < diff_bytes / sizeof(char); c++)
+    {
+        printk("%c", buf[c]);
+    }
+    printk("\nDEBUGEH: msg_len %d\n", count);
+
+
 #endif
 
 
@@ -335,20 +350,20 @@ ssize_t my_read(struct file *filp, char *buf, size_t count, loff_t *f_pos) {
  * @param buffer- the string that is the message
  * @return 0 for proper handling;
  */
-unsigned int StringHandler(struct message_t *new_message, const char *buffer) {
+unsigned int StringHandler(struct message_t *new_message, const char *buffer, size_t count) {
     unsigned int msg_len = strnlen_user(buffer, MAX_MESSAGE_LENGTH);
 
 #ifdef DEBUGEH
     // message loop
     // init message
     int c = 0;
-    printk("\nDEBUGEH: StringHandler beginning");
-    for (c = 0; c < MAX_MESSAGE_LENGTH && new_message->message[c]; c++)
+    printk("\nDEBUGEH: StringHandler beginning read user buffer\t");
+    for (c = 0; c < msg_len; c++)
     {
-        printk("%c", new_message->message[c]);
-        new_message->message[c] = '\0';
+        printk("%c", buffer[c]);
+        //new_message->message[c] = '\0';
     }
-    printk("DEBUGEH: msg_len %d\n", msg_len);
+    printk("\nDEBUGEH: msg_len %d\n", msg_len);
 
 
 #endif
@@ -388,7 +403,7 @@ unsigned int StringHandler(struct message_t *new_message, const char *buffer) {
 
 
     // copy the string message from the user space buffer to kernel's message_t.message[]
-    if (copy_from_user(new_message->message, buffer, MAX_MESSAGE_LENGTH) != 0)
+    if (copy_from_user(new_message->message, buffer, count) != 0)
     {
         printk("write: Error on copying from user space.\n");
         return -EBADF;
@@ -408,7 +423,7 @@ unsigned int StringHandler(struct message_t *new_message, const char *buffer) {
     // message loop
     // init message
     printk("\nDEBUGEH:string handler new_message->message result:\t");
-    for (c = 0; c < MAX_MESSAGE_LENGTH && new_message->message[c]; c++)
+    for (c = 0; c < MAX_MESSAGE_LENGTH; c++)
     {
         printk("%c", new_message->message[c]);
     }
@@ -446,7 +461,7 @@ ssize_t my_write(struct file *filp, const char *buf, size_t count, loff_t *f_pos
         return -EFAULT;
     }
 
-    int str_hndlr_res = StringHandler(new_message, buf);
+    int str_hndlr_res = StringHandler(new_message, buf, count);
     if (str_hndlr_res != 0)
     {  // if failed, free new_message
         kfree(new_message);
@@ -529,7 +544,7 @@ ssize_t my_write(struct file *filp, const char *buf, size_t count, loff_t *f_pos
 
     // DONE
 #ifdef DEBUGEH
-    printk("\nDEBUGEH: My_write ended, msg_len is %d\n", msg_len);
+    printk("\nDEBUGEH: My_write ended, msg_len return is  %d\n", msg_len - 1);
 #endif
     if (msg_len >= MAX_MESSAGE_LENGTH) return msg_len;  // number of bytes written
     else return msg_len - 1;
@@ -553,13 +568,13 @@ int my_ioctl(struct inode *inode, struct file *filp, unsigned int cmd, unsigned 
         printk("\nDEBUGEH: My_ioctl , SEARCH. curr_pos is %d\n", curr_fpos);
 #endif
 #ifdef DEBUGEH
-        printk("\nDEBUGEH: My_ioctl , SEARCH. arg  is %d\n", arg);
+        printk("\nDEBUGEH: My_ioctl , SEARCH. arg  is %d\n", (int) arg);
 #endif
 
 
         /////  rolling in linked list   ////////
         struct Message_Node *iter_current = chat_rooms[minor].head_message;
-        struct Message_Node *iter_next = iter_current->next;
+        //struct Message_Node *iter_next = iter_current->next;
         int steps;
         steps = 0;
 
@@ -573,57 +588,55 @@ int my_ioctl(struct inode *inode, struct file *filp, unsigned int cmd, unsigned 
 
 
         else if (iter_current->next != NULL)
+        {
+            while (iter_current->next != NULL)  // means we have at least 2 nodes alive
             {
-                while (iter_current->next != NULL)  // means we have at least 2 nodes alive
-                {
 #ifdef DEBUGEH
-                    printk("\nDEBUGEH: My_ioctl , SEARCH WHILE, steps : %d", steps);
+                printk("\nDEBUGEH: My_ioctl , SEARCH WHILE, steps : %d", steps);
 #endif
 
-                    if (iter_current->pid == arg)
+                if (iter_current->pid == arg)
+                {
+#ifdef DEBUGEH
+                    printk("\nDEBUGEH: My_ioctl , SEARCH EQ");
+#endif
+                    if (steps >= curr_fpos)  // found next message from sender
                     {
-#ifdef DEBUGEH
-                        printk("\nDEBUGEH: My_ioctl , SEARCH EQ");
-#endif
-                        if (steps >= curr_fpos)  // found next message from sender
-                        {
-                            return (steps) * sizeof(struct message_t);
-                        }
-                        // continue
+                        return (steps) * sizeof(struct message_t);
                     }
-                    steps++;
-                    iter_current = iter_current->next;
-                    //iter_next = iter_current->next;
+                    // continue
                 }
+                steps++;
+                iter_current = iter_current->next;
+                //iter_next = iter_current->next;
+            }
 
-                //if ended with no result
-                if ((iter_current->pid == arg) && (steps == curr_fpos))
-                {
+            //if ended with no result
+            if ((iter_current->pid == arg) && (steps == curr_fpos))
+            {
 
 #ifdef DEBUGEH
-                    printk("\nDEBUGEH: My_ioctl , SEARCH.ended 602");
+                printk("\nDEBUGEH: My_ioctl , SEARCH.ended 602");
 #endif
-                    return (steps) * sizeof(struct message_t);
-                }
-
-                if (curr_fpos == chat_rooms[minor].num_of_messages)
-                {  // end of the list, no further messages with that sender
-                    // ended with no result
-                    return -ENOENT;
-                }
-                // if ended with no result
-                return -ENOENT;
-                /////  rolling in linked list   ////////
+                return (steps) * sizeof(struct message_t);
             }
+
+            if (curr_fpos == chat_rooms[minor].num_of_messages)
+            {  // end of the list, no further messages with that sender
+                // ended with no result
+                return -ENOENT;
+            }
+            // if ended with no result
+            return -ENOENT;
+            /////  rolling in linked list   ////////
         }
-
-
     }
 
-else  // case wrong command
-return -
-ENOTTY;
+    else  // case wrong command
+        return -ENOTTY;
+
     return -EFAULT;
+
 }
 
 /**
