@@ -56,7 +56,7 @@ int init_module(void) {
         chat_rooms[i].minor_id = i;
         chat_rooms[i].participants_number = 0;
         chat_rooms[i].head_message = NULL;
-        chat_rooms[i].tail_message = NULL;
+        //chat_rooms[i].tail_message = NULL;
 
     }
     printk("Device driver registered - called from insmod\n");
@@ -150,7 +150,13 @@ int my_open(struct inode *inode, struct file *filp) {
             return -ENOMEM;
         }
 
-        chat_rooms[minor].tail_message = chat_rooms[minor].head_message;
+        // initialize f_pos
+        filp->f_pos = 0;
+
+#ifdef DEBUGEH
+        printk("\nDEBUGEH: my_open, init f_pos value is %d\n", filp->f_pos);
+#endif
+        //chat_rooms[minor].tail_message = chat_rooms[minor].head_message;
 
         // all kmallocs are successful
         //chat_rooms[minor] = chat_rooms[minor];
@@ -166,6 +172,7 @@ int my_open(struct inode *inode, struct file *filp) {
 
 
 // when one participant only leaves a room
+// if room has 0 participants - reset room (remove messages list)
 int my_release(struct inode *inode, struct file *filp) {
 #ifdef DEBUGEH
     printk("\nDEBUGEH: my_release started\n");
@@ -210,6 +217,7 @@ int my_release(struct inode *inode, struct file *filp) {
                     }
                 }
                 kfree(iter_current);
+                chat_rooms[minor].num_of_messages = 0;
             }
 
             /////  rolling in linked list   ////////
@@ -452,9 +460,9 @@ ssize_t my_write(struct file *filp, const char *buf, size_t count, loff_t *f_pos
     // put new message in message node
     new_node->message_pointer = new_message;
     // append new message node to the messages list, and fix the pointers of the list.
-    new_node->prev = chat_rooms[minor].tail_message;
+    //new_node->prev = chat_rooms[minor].tail_message;
     new_node->next = NULL;
-    chat_rooms[minor].tail_message->next = new_node;
+    //chat_rooms[minor].tail_message->next = new_node;
     chat_rooms[minor].num_of_messages++;
 
 
