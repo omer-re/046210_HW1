@@ -258,12 +258,16 @@ ssize_t my_read(struct file *filp, char *buf, size_t count, loff_t *f_pos) {
 
 #ifdef DEBUGEH
     // message loop
+
     printk("\nDEBUGEH: my_read started empty user buff\n");
+#endif
+    //init buff
     int c = 0;
     for (c = 0; c < MAX_MESSAGE_LENGTH; c++)
     {
         buf[c] = '\0';
     }
+#ifdef DEBUGEH
     printk("\nDEBUGEH: msg_len %d\n", count);
 #endif
 
@@ -327,7 +331,7 @@ ssize_t my_read(struct file *filp, char *buf, size_t count, loff_t *f_pos) {
     printk("\nDEBUGEH: my_read check user buf (should contain message)\n");
 
     c = 0;
-    for (c = 0; c < diff_bytes / sizeof(char); c++)
+    for (c = 0; c < count / (2 * sizeof(char)); c++)
     {
         printk("%c", buf[c]);
     }
