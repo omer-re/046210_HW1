@@ -658,12 +658,14 @@ loff_t my_llseek(struct file *filp, loff_t offset, int type) {
     //loff_t curr_fpos = filp->f_pos;
     int curr_fpos = filp->f_pos;
 #ifdef DEBUGEH
-    printk("\nDEBUGEH: my_llseek f_pos: %d\n", curr_fpos);
+    printk("\nDEBUGEH: my_llseek f_pos: %d \t out of %d messages\n", curr_fpos, chat_rooms[minor].num_of_messages);
 #endif
-    loff_t messages_offset =
+    long messages_offset =
             (long) offset / (long) sizeof(struct message_t);  // promised to be int, mult of sizeof(message_t)
     int destination_msg = filp->f_pos + messages_offset;  // the index of the message we will arrive after offset
-
+#ifdef DEBUGEH
+    printk("\nDEBUGEH: my_llseek message_offset: %d\n", (int) messages_offset);
+#endif
     // assure valid file pointer
     if (filp != NULL);
 
@@ -704,12 +706,22 @@ loff_t my_llseek(struct file *filp, loff_t offset, int type) {
         // case out of boundaries end side
         if (messages_offset >= 0)
         {
-            filp->f_pos = chat_rooms[minor].num_of_messages + 1; // TODO: +1 even though there's no message there
+#ifdef DEBUGEH
+            int curr_fpos2 = filp->f_pos;
+
+            printk("\nDEBUGEH: my_llseek SEEK_END line 710: %d\n", curr_fpos2);
+#endif
+            filp->f_pos = chat_rooms[minor].num_of_messages; // TODO: +1 even though there's no message there
+            //filp->f_pos = chat_rooms[minor].num_of_messages + 1; // TODO: +1 even though there's no message there
             return (chat_rooms[minor].num_of_messages + 1) * sizeof(struct message_t);
         }
             // case out of boundaries beginning side
-        else if (messages_offset <= -chat_rooms[minor].num_of_messages)
+        else if ((int) (-messages_offset) >= chat_rooms[minor].num_of_messages)
         { // out of boundaries
+#ifdef DEBUGEH
+            printk("\nDEBUGEH: my_llseek SEEK_END line 720: messages_offset = %d \t chat_rooms[minor].num_of_messages= %d\n",
+                   (int) messages_offset, (int) (chat_rooms[minor].num_of_messages));
+#endif
             filp->f_pos = 0;
             return 0;
         }
@@ -717,6 +729,10 @@ loff_t my_llseek(struct file *filp, loff_t offset, int type) {
             // case in boundaries
         else if (destination_msg > 0)
         {
+#ifdef DEBUGEH
+            printk("\nDEBUGEH: my_llseek SEEK_END line 730: new f_pos is %d\n",
+                   (int) chat_rooms[minor].num_of_messages + (int) messages_offset);
+#endif
             filp->f_pos = chat_rooms[minor].num_of_messages + messages_offset;
             return (filp->f_pos) * sizeof(struct message_t);
 
