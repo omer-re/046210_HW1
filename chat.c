@@ -154,7 +154,7 @@ int my_open(struct inode *inode, struct file *filp) {
         filp->f_pos = 0;
 
 #ifdef DEBUGEH
-        printk("\nDEBUGEH: my_open, init f_pos value is %d\n", filp->f_pos);
+        printk("\nDEBUGEH: my_open, init f_pos value is %d\n", (int) (filp->f_pos));
 #endif
         //chat_rooms[minor].tail_message = chat_rooms[minor].head_message;
 
@@ -301,6 +301,10 @@ ssize_t my_read(struct file *filp, char *buf, size_t count, loff_t *f_pos) {
 
     // update f_pos
     *f_pos += diff;
+#ifdef DEBUGEH
+    printk("\nDEBUGEH: my_read f_pos is: fpos=%d *fpos=%d\n", (int) f_pos, (int) *f_pos);
+#endif
+
 
 #ifdef DEBUGEH
     printk("\nDEBUGEH: my_read is done\n");
@@ -352,12 +356,21 @@ unsigned int StringHandler(struct message_t *new_message, const char *buffer) {
         return -EFAULT;
     }
 
-    // initialize array
-    int d = 0;
-    for (d = 0; c < MAX_MESSAGE_LENGTH; c++)
+    //TODO: I have init array manually on chat.c for tests.
+    if (memset(new_message->message, 0, MAX_MESSAGE_LENGTH) == NULL)
     {
-        new_message->message[d] = '\0';
+#ifdef DEBUGEH
+        printk("\nDEBUGEH: memset failed line 362\n");
+#endif
     }
+
+    
+// initialize array
+//    int d = 0;
+//    for (d = 0; d < MAX_MESSAGE_LENGTH; d++)
+//    {
+//        new_message->message[d] = '\0';
+//    }
 
     // copy the string message from the user space buffer to kernel's message_t.message[]
     if (copy_from_user(new_message->message, buffer, MAX_MESSAGE_LENGTH) != 0)
