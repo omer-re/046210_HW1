@@ -686,7 +686,8 @@ loff_t my_llseek(struct file *filp, loff_t offset, int type) {
         }
         else if (destination_msg > chat_rooms[minor].num_of_messages)
         { // out of boundaries
-            filp->f_pos = chat_rooms[minor].num_of_messages + 1; // TODO: +1 even though there's no message there
+            //filp->f_pos = chat_rooms[minor].num_of_messages + 1; // TODO: +1 even though there's no message there
+            filp->f_pos = chat_rooms[minor].num_of_messages; // TODO: +1 even though there's no message there
             return (chat_rooms[minor].num_of_messages + 1) * sizeof(struct message_t);
         }
 
@@ -746,16 +747,31 @@ loff_t my_llseek(struct file *filp, loff_t offset, int type) {
         ///// SEEK_CUR /////////
     else if (type == SEEK_CUR)
     {
+#ifdef DEBUGEH
+        printk("\nDEBUGEH: my_llseek SEEK_CURR line 751:  %d\n", (int) filp->f_pos);
 
+        printk("\nDEBUGEH: my_llseek SEEK_CURR line 753: messages_offset = %d \t chat_rooms[minor].num_of_messages= %d\n",
+               (int) messages_offset, (int) (chat_rooms[minor].num_of_messages));
+#endif
 
         if (destination_msg >= chat_rooms[minor].num_of_messages)
         {
-            filp->f_pos = chat_rooms[minor].num_of_messages + 1; // TODO: +1 even though there's no message there
+            //filp->f_pos = chat_rooms[minor].num_of_messages + 1; // TODO: +1 even though there's no message there
+            filp->f_pos = chat_rooms[minor].num_of_messages; // TODO: +1 even though there's no message there
+#ifdef DEBUGEH
+            printk("\nDEBUGEH: my_llseek SEEK_CURR line 759: messages_offset = %d \t chat_rooms[minor].num_of_messages= %d\n",
+                   (int) messages_offset, (int) (chat_rooms[minor].num_of_messages));
+#endif
+
             return (chat_rooms[minor].num_of_messages + 1) * sizeof(struct message_t);
         }
 
         else if (destination_msg <= 0)
         { // out of boundaries
+#ifdef DEBUGEH
+            printk("\nDEBUGEH: my_llseek SEEK_CURR line 773: messages_offset = %d \t chat_rooms[minor].num_of_messages= %d\n",
+                   (int) messages_offset, (int) (chat_rooms[minor].num_of_messages));
+#endif
             filp->f_pos = 0;
             return 0;
         }
