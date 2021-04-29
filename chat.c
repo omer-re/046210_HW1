@@ -131,8 +131,7 @@ int my_open(struct inode *inode, struct file *filp) {
         chat_rooms[minor].minor_id = minor;
 
         // create a messages list object
-        chat_rooms[minor].head_message = (struct Message_Node *) kmalloc(sizeof(struct Message_Node),
-                                                                         GFP_KERNEL);  // TODO: make sure it's the right casting
+        chat_rooms[minor].head_message = (struct Message_Node *) kmalloc(sizeof(struct Message_Node), GFP_KERNEL);
         // kmalloc validation
         if (chat_rooms[minor].head_message == NULL)
         {
@@ -141,14 +140,13 @@ int my_open(struct inode *inode, struct file *filp) {
 
         // create a messages pointer
         chat_rooms[minor].head_message->message_pointer = (struct message_t *) kmalloc(sizeof(struct message_t),
-                                                                                       GFP_KERNEL);  // TODO: make sure it's the right casting
+                                                                                       GFP_KERNEL);
         // kmalloc validation
         if (chat_rooms[minor].head_message->message_pointer == NULL)
         {
             return -ENOMEM;
         }
 
-        // initialize f_pos //TODO not sure if needed
 
 #ifdef DEBUGEH
         printk("\nDEBUGEH: my_open, init f_pos value is %d\n", (int) (filp->f_pos));
@@ -441,8 +439,7 @@ ssize_t my_write(struct file *filp, const char *buf, size_t count, loff_t *f_pos
     unsigned int msg_len = strnlen_user(buf, MAX_MESSAGE_LENGTH);
 
     // create a messages pointer
-    struct message_t *new_message = (struct message_t *) kmalloc(sizeof(struct message_t),
-                                                                 GFP_KERNEL);  // TODO: make sure it's the right casting
+    struct message_t *new_message = (struct message_t *) kmalloc(sizeof(struct message_t), GFP_KERNEL);
     // kmalloc validation
     if (new_message == NULL)
     {
@@ -485,8 +482,7 @@ ssize_t my_write(struct file *filp, const char *buf, size_t count, loff_t *f_pos
     new_message->timestamp = gettime();
 
     // create a messages list object
-    struct Message_Node *new_node = (struct Message_Node *) kmalloc(sizeof(struct Message_Node),
-                                                                    GFP_KERNEL);  // TODO: make sure it's the right casting
+    struct Message_Node *new_node = (struct Message_Node *) kmalloc(sizeof(struct Message_Node), GFP_KERNEL);
     // kmalloc validation
     if (new_node == NULL)
     {
@@ -731,7 +727,7 @@ loff_t my_llseek(struct file *filp, loff_t offset, int type) {
                (int) messages_offset, (int) (chat_rooms[minor].num_of_messages));
 #endif
 
-        if ((filp->f_pos+ messages_offset) >= (chat_rooms[minor].num_of_messages))
+        if ((filp->f_pos + messages_offset) >= (chat_rooms[minor].num_of_messages))
         {
             filp->f_pos = chat_rooms[minor].num_of_messages; // TODO: +1 even though there's no message there
 #ifdef DEBUGEH
@@ -742,7 +738,7 @@ loff_t my_llseek(struct file *filp, loff_t offset, int type) {
             return (chat_rooms[minor].num_of_messages + 1) * sizeof(struct message_t);
         }
 
-        else if ((filp->f_pos + messages_offset)<=0)
+        else if ((filp->f_pos + messages_offset) <= 0)
         { // out of boundaries
 #ifdef DEBUGEH
             printk("\nDEBUGEH: my_llseek SEEK_CURR line 773: messages_offset = %d \t chat_rooms[minor].num_of_messages= %d\n",
