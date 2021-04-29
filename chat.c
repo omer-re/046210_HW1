@@ -99,7 +99,6 @@ void cleanup_module(void) {
 
 
         // release chat rooms list
-        //kfree(chat_rooms);
     }
     // all allocations been released.
 
@@ -150,7 +149,6 @@ int my_open(struct inode *inode, struct file *filp) {
         }
 
         // initialize f_pos //TODO not sure if needed
-        //filp->f_pos = 0;
 
 #ifdef DEBUGEH
         printk("\nDEBUGEH: my_open, init f_pos value is %d\n", (int) (filp->f_pos));
@@ -158,7 +156,6 @@ int my_open(struct inode *inode, struct file *filp) {
         //chat_rooms[minor].tail_message = chat_rooms[minor].head_message;
 
         // all kmallocs are successful
-        //chat_rooms[minor] = chat_rooms[minor];
 #ifdef DEBUGEH
         printk("\nDEBUGEH: my_open, is done\n");
 #endif
@@ -277,7 +274,6 @@ ssize_t my_read(struct file *filp, char *buf, size_t count, loff_t *f_pos) {
     // assuming room number is fine and room exists from my_open
     int minor = MINOR(filp->f_dentry->d_inode->i_rdev); // which is the chat_room
 
-    //int num_read_messages = ((long) *f_pos / sizeof(struct message_t));
     int num_read_messages = *f_pos;
     // check how many unread messages are there
 #ifdef DEBUGEH
@@ -365,7 +361,6 @@ unsigned int StringHandler(struct message_t *new_message, const char *buffer, si
     for (c = 0; c < msg_len; c++)
     {
         printk("%c", buffer[c]);
-        //new_message->message[c] = '\0';
     }
     printk("\nDEBUGEH: msg_len %d\n", msg_len);
 
@@ -414,15 +409,6 @@ unsigned int StringHandler(struct message_t *new_message, const char *buffer, si
     }
 
 
-//TODO: I think it causes problems on my_test.py line 96
-    // if message is shorter than max and has no '/0' - add it.
-//    if (msg_len < MAX_MESSAGE_LENGTH && buffer[msg_len - 1] != '\0')
-//    {  // needs to add it
-//        new_message->message[msg_len - 1] = '\0';
-//
-//    }
-//
-
 #ifdef DEBUGEH
     // message loop
     // init message
@@ -453,7 +439,6 @@ ssize_t my_write(struct file *filp, const char *buf, size_t count, loff_t *f_pos
     printk("\nDEBUGEH: My_write started\n");
 #endif
     unsigned int msg_len = strnlen_user(buf, MAX_MESSAGE_LENGTH);
-    //printk("write: Couldn't allocate mem for input string.\n");
 
     // create a messages pointer
     struct message_t *new_message = (struct message_t *) kmalloc(sizeof(struct message_t),
@@ -519,7 +504,6 @@ ssize_t my_write(struct file *filp, const char *buf, size_t count, loff_t *f_pos
     new_node->timestamp = gettime();
     new_node->message_pointer = new_message;
     // append new message node to the messages list, and fix the pointers of the list.
-    //new_node->prev = chat_rooms[minor].tail_message;
     if (chat_rooms[minor].num_of_messages == 0)
     {
         chat_rooms[minor].head_message = new_node;
@@ -527,7 +511,6 @@ ssize_t my_write(struct file *filp, const char *buf, size_t count, loff_t *f_pos
 
     else
     {
-        //chat_rooms[minor].tail_message->next = new_node;
 
         int i = 0;
         struct Message_Node *curr = chat_rooms[minor].head_message;
@@ -557,7 +540,6 @@ ssize_t my_write(struct file *filp, const char *buf, size_t count, loff_t *f_pos
 int my_ioctl(struct inode *inode, struct file *filp, unsigned int cmd, unsigned long arg) {
     // get the chat_room number from the inode
     unsigned int minor = MINOR(inode->i_rdev);
-    //loff_t curr_fpos = filp->f_pos;
     int curr_fpos = filp->f_pos;  // current index of last read message
 
     if (cmd == COUNT_UNREAD)
@@ -578,7 +560,6 @@ int my_ioctl(struct inode *inode, struct file *filp, unsigned int cmd, unsigned 
 
         /////  rolling in linked list   ////////
         struct Message_Node *iter_current = chat_rooms[minor].head_message;
-        //struct Message_Node *iter_next = iter_current->next;
         int steps;
         steps = 0;
 
@@ -612,7 +593,6 @@ int my_ioctl(struct inode *inode, struct file *filp, unsigned int cmd, unsigned 
                 }
                 steps++;
                 iter_current = iter_current->next;
-                //iter_next = iter_current->next;
             }
 
             //if ended with no result
@@ -655,7 +635,6 @@ loff_t my_llseek(struct file *filp, loff_t offset, int type) {
 
     int minor = MINOR(filp->f_dentry->d_inode->i_rdev);
 
-    //loff_t curr_fpos = filp->f_pos;
     int curr_fpos = filp->f_pos;
 #ifdef DEBUGEH
     printk("\nDEBUGEH: my_llseek f_pos: %d \t out of %d messages\n", curr_fpos, chat_rooms[minor].num_of_messages);
@@ -686,8 +665,7 @@ loff_t my_llseek(struct file *filp, loff_t offset, int type) {
         }
         else if (messages_offset > chat_rooms[minor].num_of_messages)
         { // out of boundaries
-            //filp->f_pos = chat_rooms[minor].num_of_messages + 1; // TODO: +1 even though there's no message there
-            filp->f_pos = chat_rooms[minor].num_of_messages; // TODO: +1 even though there's no message there
+            filp->f_pos = chat_rooms[minor].num_of_messages;
             return (chat_rooms[minor].num_of_messages + 1) * sizeof(struct message_t);
         }
 
@@ -713,7 +691,6 @@ loff_t my_llseek(struct file *filp, loff_t offset, int type) {
             printk("\nDEBUGEH: my_llseek SEEK_END line 710: %d\n", curr_fpos2);
 #endif
             filp->f_pos = chat_rooms[minor].num_of_messages; // TODO: +1 even though there's no message there
-            //filp->f_pos = chat_rooms[minor].num_of_messages + 1; // TODO: +1 even though there's no message there
             return (chat_rooms[minor].num_of_messages + 1) * sizeof(struct message_t);
         }
             // case out of boundaries beginning side
@@ -756,7 +733,6 @@ loff_t my_llseek(struct file *filp, loff_t offset, int type) {
 
         if ((filp->f_pos+ messages_offset) >= (chat_rooms[minor].num_of_messages))
         {
-            //filp->f_pos = chat_rooms[minor].num_of_messages + 1; // TODO: +1 even though there's no message there
             filp->f_pos = chat_rooms[minor].num_of_messages; // TODO: +1 even though there's no message there
 #ifdef DEBUGEH
             printk("\nDEBUGEH: my_llseek SEEK_CURR line 759: dest = %d \t chat_rooms[minor].num_of_messages= %d\n",
