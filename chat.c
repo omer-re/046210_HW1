@@ -1,3 +1,5 @@
+//VERSION OF 30.4
+
 /* chat.c: Example char device module.
  *
  */
