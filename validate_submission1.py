@@ -24,9 +24,9 @@ def get_submitters(temp_folder):
     
     submitters = [line.strip() for line in sub_data]
     submitters = [line for line in submitters if line != '']
-    print 'Validate format success - please make sure your code compiles and you submit your *final* version!'
-    print 'Submitter A: ' + submitters[0]
-    print 'Submitter B: ' + submitters[1]
+    print ('Validate format success - please make sure your code compiles and you submit your *final* version!')
+    print ('Submitter A: ' + submitters[0])
+    print ('Submitter B: ' + submitters[1])
 
 def unzip_submission(submission_file):
     

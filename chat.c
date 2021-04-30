@@ -751,7 +751,7 @@ loff_t my_llseek(struct file *filp, loff_t offset, int type) {
         else
         {
             filp->f_pos = (filp->f_pos + messages_offset);
-            return ((filp->f_pos + messages_offset)) * sizeof(struct message_t);
+            return (filp->f_pos) * sizeof(struct message_t);
 
         }
     }
