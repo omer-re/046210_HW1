@@ -69,31 +69,70 @@ int init_module(void) {
 
 
 void cleanup_module(void) {
-
 #ifdef DEBUGEH
     printk("\nDEBUGEH: Cleanup\n");
 #endif
     unregister_chrdev(my_major, MY_DEVICE);
-    // before leaving free list
-    int i = 0;
-    for (i = 0; i < MAX_ROOMS_POSSIBLE; i++)
-    {
-        struct Message_Node *iter_current = chat_rooms[i].head_message;
-        struct Message_Node *iter_next = iter_current->next;
 
-        if (iter_current != NULL)
+
+    // before leaving free list
+
+    if (chat_rooms != NULL)
+    {
+#ifdef DEBUGEH
+        printk("\nDEBUGEH: Cleanup chat_rooms[i].head_message!=NULL\n");
+#endif
+        int i = 0;
+        for (i = 0; i < MAX_ROOMS_POSSIBLE; i++)
         {
-            if (iter_next != NULL)
+#ifdef DEBUGEH
+            printk("\nDEBUGEH: Cleanup messages in room number %d: %d\n", i, chat_rooms[i].num_of_messages);
+#endif
+            if (chat_rooms[i].num_of_messages == 0)
             {
-                // free all messages
-                while (iter_next != NULL)  // means we have at least 2 nodes alive
-                {
-                    kfree(iter_current->message_pointer);
-                    iter_current = iter_next;
-                    iter_next = iter_current->next;
-                }
+                break;
             }
-            kfree(iter_current);
+            struct Message_Node *iter_current = chat_rooms[i].head_message;
+            struct Message_Node *iter_next = iter_current->next;
+#ifdef DEBUGEH
+            printk("\nDEBUGEH: Cleanup enter loop\n");
+#endif
+            if (iter_current != NULL)
+            {
+#ifdef DEBUGEH
+                printk("\nDEBUGEH: Cleanup loop 93\n");
+#endif
+                if (iter_next != NULL)
+                {
+#ifdef DEBUGEH
+                    printk("\nDEBUGEH: Cleanup loop 98\n");
+#endif
+                    // free all messages
+                    int t;
+                    for (t = 0; t < chat_rooms[i].num_of_messages; t++)
+                    {
+#ifdef DEBUGEH
+                        printk("\nDEBUGEH: Cleanup loop 104 chat room %d message num %d\n", i, t);
+#endif
+                        kfree(iter_current->message_pointer);
+                        iter_current = iter_next;
+                        if (t == chat_rooms[i].num_of_messages - 1) break;
+                        iter_next = iter_current->next;
+
+                    }
+#ifdef DEBUGEH
+                    printk("\nDEBUGEH: Cleanup loop done for loop\n");
+#endif
+
+                }
+#ifdef DEBUGEH
+                printk("\nDEBUGEH: Cleanup loop 117\n");
+#endif
+                //kfree(iter_current);
+            }
+#ifdef DEBUGEH
+            printk("\nDEBUGEH: loop iteration %d", i);
+#endif
         }
         // assign room as free
         chat_rooms[i].participants_number = 0;
