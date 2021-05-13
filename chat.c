@@ -77,71 +77,71 @@ void cleanup_module(void) {
 
     // before leaving free list
 
-    if (chat_rooms != NULL)
-    {
-#ifdef DEBUGEH
-        printk("\nDEBUGEH: Cleanup chat_rooms[i].head_message!=NULL\n");
-#endif
-        int i = 0;
-        for (i = 0; i < MAX_ROOMS_POSSIBLE; i++)
-        {
-#ifdef DEBUGEH
-            printk("\nDEBUGEH: Cleanup messages in room number %d: %d\n", i, chat_rooms[i].num_of_messages);
-#endif
-            if (chat_rooms[i].num_of_messages == 0)
-            {
-                break;
-            }
-            struct Message_Node *iter_current = chat_rooms[i].head_message;
-            struct Message_Node *iter_next = iter_current->next;
-#ifdef DEBUGEH
-            printk("\nDEBUGEH: Cleanup enter loop\n");
-#endif
-            if (iter_current != NULL)
-            {
-#ifdef DEBUGEH
-                printk("\nDEBUGEH: Cleanup loop 93\n");
-#endif
-                if (iter_next != NULL)
-                {
-#ifdef DEBUGEH
-                    printk("\nDEBUGEH: Cleanup loop 98\n");
-#endif
-                    // free all messages
-                    int t;
-                    for (t = 0; t < chat_rooms[i].num_of_messages; t++)
-                    {
-#ifdef DEBUGEH
-                        printk("\nDEBUGEH: Cleanup loop 104 chat room %d message num %d\n", i, t);
-#endif
-                        kfree(iter_current->message_pointer);
-                        iter_current = iter_next;
-                        if (t == chat_rooms[i].num_of_messages - 1) break;
-                        iter_next = iter_current->next;
-
-                    }
-#ifdef DEBUGEH
-                    printk("\nDEBUGEH: Cleanup loop done for loop\n");
-#endif
-
-                }
-#ifdef DEBUGEH
-                printk("\nDEBUGEH: Cleanup loop 117\n");
-#endif
-                //kfree(iter_current);
-            }
-#ifdef DEBUGEH
-            printk("\nDEBUGEH: loop iteration %d", i);
-#endif
-        }
-        // assign room as free
-        chat_rooms[i].participants_number = 0;
-
-
-
-        // release chat rooms list
-    }
-    // all allocations been released.
+//    if (chat_rooms != NULL)
+//    {
+//#ifdef DEBUGEH
+//        printk("\nDEBUGEH: Cleanup chat_rooms[i].head_message!=NULL\n");
+//#endif
+//        int i = 0;
+//        for (i = 0; i < MAX_ROOMS_POSSIBLE; i++)
+//        {
+//#ifdef DEBUGEH
+//            printk("\nDEBUGEH: Cleanup messages in room number %d: %d\n", i, chat_rooms[i].num_of_messages);
+//#endif
+//            if (chat_rooms[i].num_of_messages == 0)
+//            {
+//                break;
+//            }
+//            struct Message_Node *iter_current = chat_rooms[i].head_message;
+//            struct Message_Node *iter_next = iter_current->next;
+//#ifdef DEBUGEH
+//            printk("\nDEBUGEH: Cleanup enter loop\n");
+//#endif
+//            if (iter_current != NULL)
+//            {
+//#ifdef DEBUGEH
+//                printk("\nDEBUGEH: Cleanup loop 93\n");
+//#endif
+//                if (iter_next != NULL)
+//                {
+//#ifdef DEBUGEH
+//                    printk("\nDEBUGEH: Cleanup loop 98\n");
+//#endif
+//                    // free all messages
+//                    int t;
+//                    for (t = 0; t < chat_rooms[i].num_of_messages; t++)
+//                    {
+//#ifdef DEBUGEH
+//                        printk("\nDEBUGEH: Cleanup loop 104 chat room %d message num %d\n", i, t);
+//#endif
+//                        kfree(iter_current->message_pointer);
+//                        iter_current = iter_next;
+//                        if (t == chat_rooms[i].num_of_messages - 1) break;
+//                        iter_next = iter_current->next;
+//
+//                    }
+//#ifdef DEBUGEH
+//                    printk("\nDEBUGEH: Cleanup loop done for loop\n");
+//#endif
+//
+//                }
+//#ifdef DEBUGEH
+//                printk("\nDEBUGEH: Cleanup loop 117\n");
+//#endif
+//                //kfree(iter_current);
+//            }
+//#ifdef DEBUGEH
+//            printk("\nDEBUGEH: loop iteration %d", i);
+//#endif
+//        }
+//        // assign room as free
+//        chat_rooms[i].participants_number = 0;
+//
+//
+//
+//        // release chat rooms list
+//    }
+//    // all allocations been released.
 
 #ifdef DEBUGEH
     printk("\nDEBUGEH: Cleanup done\n");
@@ -297,6 +297,28 @@ ssize_t my_read(struct file *filp, char *buf, size_t count, loff_t *f_pos) {
 
     printk("\nDEBUGEH: my_read started empty user buff\n");
 #endif
+
+    if (buf == NULL)
+    {
+#ifdef DEBUGEH
+        printk("\nDEBUGEH: my_read buff is NULL\n");
+#endif
+        return -EFAULT;
+    }
+
+    // go to the right chat room
+    // assuming room number is fine and room exists from my_open
+    int minor = MINOR(filp->f_dentry->d_inode->i_rdev); // which is the chat_room
+
+    if (chat_rooms[minor].num_of_messages == 0)
+    {
+#ifdef DEBUGEH
+        printk("\nDEBUGEH: my_read no messages to read\n");
+#endif
+        return 0;
+
+    }
+
     //init buff
     int c = 0;
     for (c = 0; c < MAX_MESSAGE_LENGTH; c++)
@@ -309,9 +331,7 @@ ssize_t my_read(struct file *filp, char *buf, size_t count, loff_t *f_pos) {
 
     //  our buff is always pointer to message_t
 
-    // go to the right chat room
-    // assuming room number is fine and room exists from my_open
-    int minor = MINOR(filp->f_dentry->d_inode->i_rdev); // which is the chat_room
+
 
     int num_read_messages = *f_pos;
     // check how many unread messages are there
@@ -329,7 +349,14 @@ ssize_t my_read(struct file *filp, char *buf, size_t count, loff_t *f_pos) {
 #ifdef DEBUGEH
     printk("\nDEBUGEH: my_read wanted is: %d   diff is: %d  \n", num_wanted_messages, diff);
 #endif
-    if (diff < 0) diff = num_wanted_messages;  //we can provide that number of messages
+    if (chat_rooms[minor].num_of_messages == 0)
+    {
+#ifdef DEBUGEH
+        diff = 0;
+        printk("\nDEBUGEH: my_read no messages to read\n");
+#endif
+    }
+    else if (diff < 0) diff = num_wanted_messages;  //we can provide that number of messages
     else if (diff >= 0) diff = num_unread_messages;  // not enough messages as required, read all unread
 
     int diff_bytes = diff * sizeof(struct message_t);
@@ -343,13 +370,26 @@ ssize_t my_read(struct file *filp, char *buf, size_t count, loff_t *f_pos) {
         iter_current = iter_current->next;
     }
 
+#ifdef DEBUGEH
+
+    printk("Read: message %d is %s\n", i, iter_current->message_pointer->message);
+
+#endif
     // in case there are few messages (diff is the num of messages needs to read), read one by one from f_pos
     for (i = 0; i < diff; i++)
     {
+#ifdef DEBUGEH
+
+        printk("Read: message %d is %s\n", i, iter_current->message_pointer->message);
+
+#endif
         // copy to user
-        if (copy_to_user((void *) buf, iter_current->message_pointer, diff_bytes))  // return 0 is error
+        //if (copy_to_user((void *) buf, iter_current->message_pointer, diff_bytes))  // return 0 is error
+        if (copy_to_user((void *) buf + (sizeof(struct message_t) * i), iter_current->message_pointer,
+                         sizeof(struct message_t)))  // return 0 is error
         {
             printk("Read: Failed to write map to user space.\n");
+            printk("Read: message %d is %s\n", i, iter_current->message_pointer->message);
             return -EBADF;
         }
         iter_current = iter_current->next;
@@ -390,6 +430,7 @@ ssize_t my_read(struct file *filp, char *buf, size_t count, loff_t *f_pos) {
  * @return 0 for proper handling;
  */
 unsigned int StringHandler(struct message_t *new_message, const char *buffer, size_t count) {
+
     unsigned int msg_len = strnlen_user(buffer, MAX_MESSAGE_LENGTH);
 
 #ifdef DEBUGEH
@@ -416,6 +457,9 @@ unsigned int StringHandler(struct message_t *new_message, const char *buffer, si
     int required_buf = (msg_len); // number of chars needed
     if (required_buf > MAX_MESSAGE_LENGTH)
     {
+
+        printk("problem with required_buf\n");
+
         return -ENOSPC;
     }
 
@@ -478,6 +522,7 @@ ssize_t my_write(struct file *filp, const char *buf, size_t count, loff_t *f_pos
     printk("\nDEBUGEH: My_write started\n");
 #endif
     unsigned int msg_len = strnlen_user(buf, MAX_MESSAGE_LENGTH);
+    printk("\nDEBUGEH: My_write msg_len = %d\n", msg_len);
 
     // create a messages pointer
     struct message_t *new_message = (struct message_t *) kmalloc(sizeof(struct message_t), GFP_KERNEL);
@@ -505,10 +550,12 @@ ssize_t my_write(struct file *filp, const char *buf, size_t count, loff_t *f_pos
     // init message
     int c = 0;
     printk("\nDEBUGEH: MY_WRITE 453 new_message->message result:");
-    for (c = 0; c < MAX_MESSAGE_LENGTH && new_message->message[c] != '\0'; c++)
-    {
-        printk("%c", new_message->message[c]);
-    }
+    printk("%s", new_message->message);
+
+//    for (c = 0; c < MAX_MESSAGE_LENGTH && new_message->message[c] != '\0'; c++)
+//    {
+//        printk("%c", new_message->message[c]);
+//    }
 
 #endif
 
@@ -554,10 +601,12 @@ ssize_t my_write(struct file *filp, const char *buf, size_t count, loff_t *f_pos
 
         for (i = 0; i < (chat_rooms[minor].num_of_messages - 1); i++)
         {
+            printk("\nDEBUGEH: pointer of curr %p message is: %s\n", curr, curr->message_pointer->message);
             curr = curr->next;
+
         }
-        curr->next = new_node;
         new_node->prev = curr;
+        curr->next = new_node;
 
     }
 
@@ -570,8 +619,8 @@ ssize_t my_write(struct file *filp, const char *buf, size_t count, loff_t *f_pos
 #ifdef DEBUGEH
     printk("\nDEBUGEH: My_write ended, msg_len return is  %d\n", msg_len - 1);
 #endif
-    if (msg_len >= MAX_MESSAGE_LENGTH) return msg_len;  // number of bytes written
-    else return msg_len - 1;
+    if (msg_len >= MAX_MESSAGE_LENGTH) return msg_len * sizeof(char);  // number of bytes written
+    else return msg_len * sizeof(char);
 }
 
 int my_ioctl(struct inode *inode, struct file *filp, unsigned int cmd, unsigned long arg) {
