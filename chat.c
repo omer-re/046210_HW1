@@ -75,74 +75,6 @@ void cleanup_module(void) {
     unregister_chrdev(my_major, MY_DEVICE);
 
 
-    // before leaving free list
-
-//    if (chat_rooms != NULL)
-//    {
-//#ifdef DEBUGEH
-//        printk("\nDEBUGEH: Cleanup chat_rooms[i].head_message!=NULL\n");
-//#endif
-//        int i = 0;
-//        for (i = 0; i < MAX_ROOMS_POSSIBLE; i++)
-//        {
-//#ifdef DEBUGEH
-//            printk("\nDEBUGEH: Cleanup messages in room number %d: %d\n", i, chat_rooms[i].num_of_messages);
-//#endif
-//            if (chat_rooms[i].num_of_messages == 0)
-//            {
-//                break;
-//            }
-//            struct Message_Node *iter_current = chat_rooms[i].head_message;
-//            struct Message_Node *iter_next = iter_current->next;
-//#ifdef DEBUGEH
-//            printk("\nDEBUGEH: Cleanup enter loop\n");
-//#endif
-//            if (iter_current != NULL)
-//            {
-//#ifdef DEBUGEH
-//                printk("\nDEBUGEH: Cleanup loop 93\n");
-//#endif
-//                if (iter_next != NULL)
-//                {
-//#ifdef DEBUGEH
-//                    printk("\nDEBUGEH: Cleanup loop 98\n");
-//#endif
-//                    // free all messages
-//                    int t;
-//                    for (t = 0; t < chat_rooms[i].num_of_messages; t++)
-//                    {
-//#ifdef DEBUGEH
-//                        printk("\nDEBUGEH: Cleanup loop 104 chat room %d message num %d\n", i, t);
-//#endif
-//                        kfree(iter_current->message_pointer);
-//                        iter_current = iter_next;
-//                        if (t == chat_rooms[i].num_of_messages - 1) break;
-//                        iter_next = iter_current->next;
-//
-//                    }
-//#ifdef DEBUGEH
-//                    printk("\nDEBUGEH: Cleanup loop done for loop\n");
-//#endif
-//
-//                }
-//#ifdef DEBUGEH
-//                printk("\nDEBUGEH: Cleanup loop 117\n");
-//#endif
-//                //kfree(iter_current);
-//            }
-//#ifdef DEBUGEH
-//            printk("\nDEBUGEH: loop iteration %d", i);
-//#endif
-//        }
-//        // assign room as free
-//        chat_rooms[i].participants_number = 0;
-//
-//
-//
-//        // release chat rooms list
-//    }
-//    // all allocations been released.
-
 #ifdef DEBUGEH
     printk("\nDEBUGEH: Cleanup done\n");
 #endif
@@ -548,14 +480,11 @@ ssize_t my_write(struct file *filp, const char *buf, size_t count, loff_t *f_pos
 #ifdef DEBUGEH
     // message loop
     // init message
-    int c = 0;
+    //int c = 0;
     printk("\nDEBUGEH: MY_WRITE 453 new_message->message result:");
     printk("%s", new_message->message);
 
-//    for (c = 0; c < MAX_MESSAGE_LENGTH && new_message->message[c] != '\0'; c++)
-//    {
-//        printk("%c", new_message->message[c]);
-//    }
+
 
 #endif
 
@@ -584,8 +513,8 @@ ssize_t my_write(struct file *filp, const char *buf, size_t count, loff_t *f_pos
     printk("\nDEBUGEH:  new_node->message_pointer pid1 %d\n", new_message->pid);
 #endif
     // put new message in message node
-    new_node->pid = getpid();
-    new_node->timestamp = gettime();
+    new_message->pid = getpid();
+    new_message->timestamp = gettime();
     new_node->message_pointer = new_message;
     // append new message node to the messages list, and fix the pointers of the list.
     if (chat_rooms[minor].num_of_messages == 0)
@@ -652,7 +581,7 @@ int my_ioctl(struct inode *inode, struct file *filp, unsigned int cmd, unsigned 
 
         if (iter_current->next == NULL)
         {
-            if ((iter_current->pid == arg) && (curr_fpos == 0))
+            if ((iter_current->message_pointer->pid == arg) && (curr_fpos == 0))
             {
                 return 0;
             }
@@ -667,7 +596,7 @@ int my_ioctl(struct inode *inode, struct file *filp, unsigned int cmd, unsigned 
                 printk("\nDEBUGEH: My_ioctl , SEARCH WHILE, steps : %d", steps);
 #endif
 
-                if (iter_current->pid == arg)
+                if (iter_current->message_pointer->pid == arg)
                 {
 #ifdef DEBUGEH
                     printk("\nDEBUGEH: My_ioctl , SEARCH EQ");
@@ -683,7 +612,7 @@ int my_ioctl(struct inode *inode, struct file *filp, unsigned int cmd, unsigned 
             }
 
             //if ended with no result
-            if ((iter_current->pid == arg) )
+            if ((iter_current->message_pointer->pid == arg))
             {
 
 #ifdef DEBUGEH
@@ -692,11 +621,6 @@ int my_ioctl(struct inode *inode, struct file *filp, unsigned int cmd, unsigned 
                 return (steps) * sizeof(struct message_t);
             }
 
-            //   if (curr_fpos == chat_rooms[minor].num_of_messages)
-            // {  // end of the list, no further messages with that sender
-            // ended with no result
-            //   return -ENOENT;
-            //}
             // if ended with no result
             return -ENOENT;
             /////  rolling in linked list   ////////
