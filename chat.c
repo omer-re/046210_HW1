@@ -521,7 +521,7 @@ ssize_t my_write(struct file *filp, const char *buf, size_t count, loff_t *f_pos
 #ifdef DEBUGEH
     printk("\nDEBUGEH: My_write started\n");
 #endif
-    unsigned int msg_len = strnlen_user(buf, MAX_MESSAGE_LENGTH);
+    unsigned int msg_len = strnlen_user(buf, MAX_MESSAGE_LENGTH)-1;
     printk("\nDEBUGEH: My_write msg_len = %d\n", msg_len);
 
     // create a messages pointer
@@ -619,8 +619,9 @@ ssize_t my_write(struct file *filp, const char *buf, size_t count, loff_t *f_pos
 #ifdef DEBUGEH
     printk("\nDEBUGEH: My_write ended, msg_len return is  %d\n", msg_len - 1);
 #endif
-    if (msg_len >= MAX_MESSAGE_LENGTH) return msg_len * sizeof(char);  // number of bytes written
-    else return msg_len * sizeof(char);
+    //if (msg_len >= MAX_MESSAGE_LENGTH) return MAX_MESSAGE_LENGTH * sizeof(char);  // number of bytes written
+    //else return msg_len * sizeof(char);
+    return count;
 }
 
 int my_ioctl(struct inode *inode, struct file *filp, unsigned int cmd, unsigned long arg) {
@@ -682,7 +683,7 @@ int my_ioctl(struct inode *inode, struct file *filp, unsigned int cmd, unsigned 
             }
 
             //if ended with no result
-            if ((iter_current->pid == arg) && (steps == curr_fpos))
+            if ((iter_current->pid == arg) )
             {
 
 #ifdef DEBUGEH
@@ -691,15 +692,16 @@ int my_ioctl(struct inode *inode, struct file *filp, unsigned int cmd, unsigned 
                 return (steps) * sizeof(struct message_t);
             }
 
-            if (curr_fpos == chat_rooms[minor].num_of_messages)
-            {  // end of the list, no further messages with that sender
-                // ended with no result
-                return -ENOENT;
-            }
+            //   if (curr_fpos == chat_rooms[minor].num_of_messages)
+            // {  // end of the list, no further messages with that sender
+            // ended with no result
+            //   return -ENOENT;
+            //}
             // if ended with no result
             return -ENOENT;
             /////  rolling in linked list   ////////
         }
+        return -ENOENT;
     }
 
     else  // case wrong command
